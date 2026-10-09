@@ -1,0 +1,17 @@
+[project]
+name = "dora-so101"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dora-so101-teleop",
+]
+
+[tool.uv.workspace]
+members = [
+    "nodes/dora-so101-teleop",
+]
+
+[tool.uv.sources]
+dora-so101-teleop = { workspace = true }

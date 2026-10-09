@@ -1,0 +1,25 @@
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[manifest]
+members = [
+    "dora-so101",
+    "dora-so101-teleop",
+]
+
+[[package]]
+name = "dora-so101"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "dora-so101-teleop" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "dora-so101-teleop", editable = "nodes/dora-so101-teleop" }]
+
+[[package]]
+name = "dora-so101-teleop"
+version = "0.1.0"
+source = { editable = "nodes/dora-so101-teleop" }
