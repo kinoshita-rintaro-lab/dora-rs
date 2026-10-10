@@ -1,0 +1,14 @@
+nodes:
+  - id: leader
+    path: dora-so101-leader
+    inputs: 
+      tick: dora/timer/millis/16 # 30fps
+    outputs:
+      - leader_cmd
+    
+  # - id: follower
+  #   path: dora-so101-follower
+  #   inputs:
+  #     cmd: leader/leader_command
+  #   outputs:
+  #     - follower_state    

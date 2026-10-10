@@ -1,0 +1,14 @@
+nodes:
+  - id: leader
+    path: dora-so101-leader
+    inputs: 
+      tick: dora/timer/millis/16 # 60fps
+    outputs:
+      - leader_cmd
+
+  - id: mujoco
+    path: dora-so101-mujoco
+    inputs:
+      leader_cmd: leader/leader_cmd
+    outputs:
+      - mujoco_state

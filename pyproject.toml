@@ -5,13 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "dora-rs-cli>=1.1.0",
+    "dora-so101-leader",
+    "dora-so101-mujoco",
     "dora-so101-teleop",
+    "lerobot[feetech]>=0.6.1",
 ]
 
 [tool.uv.workspace]
 members = [
     "nodes/dora-so101-teleop",
+    "nodes/dora-so101-leader",
+    "nodes/dora-so101-mujoco",
 ]
 
 [tool.uv.sources]
 dora-so101-teleop = { workspace = true }
+dora-so101-leader = { workspace = true }
+dora-so101-mujoco = { workspace = true }

@@ -1,0 +1,21 @@
+[project]
+name = "dora-so101-mujoco"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "madamadamadao" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dora-rs>=1.1.0",
+    "mujoco>=3.15.0",
+    "pyarrow>=25.0.1",
+]
+
+[project.scripts]
+dora-so101-mujoco = "dora_so101_mujoco:main"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
