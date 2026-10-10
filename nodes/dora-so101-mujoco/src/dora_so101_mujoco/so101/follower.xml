@@ -1,0 +1,13 @@
+<mujoco model="so101_follower">
+  <include file="so101_new_calib.xml"/>
+
+  <!-- Joint PD: torque = kp * (target - q) + kv * (0 - qvel). target is data.ctrl. -->
+  <actuator>
+    <position name="shoulder_pan" joint="shoulder_pan" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-1.91986 1.91986"/>
+    <position name="shoulder_lift" joint="shoulder_lift" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-1.74533 1.74533"/>
+    <position name="elbow_flex" joint="elbow_flex" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-1.69 1.69"/>
+    <position name="wrist_flex" joint="wrist_flex" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-1.65806 1.65806"/>
+    <position name="wrist_roll" joint="wrist_roll" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-2.74385 2.84121"/>
+    <position name="gripper" joint="gripper" kp="998.22" kv="2.731" forcerange="-3.35 3.35" ctrlrange="-0.17453 1.74533"/>
+  </actuator>
+</mujoco>

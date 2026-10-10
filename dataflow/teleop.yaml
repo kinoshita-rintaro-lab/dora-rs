@@ -6,9 +6,10 @@ nodes:
     outputs:
       - leader_cmd
     
-  # - id: follower
-  #   path: dora-so101-follower
-  #   inputs:
-  #     cmd: leader/leader_command
-  #   outputs:
-  #     - follower_state    
+  - id: follower
+    path: dora-so101-follower
+    inputs:
+      cmd: leader/leader_cmd
+    outputs:
+      - follower_state  
+  

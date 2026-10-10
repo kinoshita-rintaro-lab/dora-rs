@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "dora-so101",
+    "dora-so101-follower",
     "dora-so101-leader",
     "dora-so101-mujoco",
     "dora-so101-teleop",
@@ -370,6 +371,23 @@ requires-dist = [
     { name = "dora-so101-mujoco", editable = "nodes/dora-so101-mujoco" },
     { name = "dora-so101-teleop", editable = "nodes/dora-so101-teleop" },
     { name = "lerobot", extras = ["feetech"], specifier = ">=0.6.1" },
+]
+
+[[package]]
+name = "dora-so101-follower"
+version = "0.1.0"
+source = { editable = "nodes/dora-so101-follower" }
+dependencies = [
+    { name = "dora-rs" },
+    { name = "lerobot", extra = ["feetech"] },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dora-rs", specifier = ">=1.1.0" },
+    { name = "lerobot", extras = ["feetech"], specifier = ">=0.6.1" },
+    { name = "pyarrow", specifier = ">=25.0.1" },
 ]
 
 [[package]]

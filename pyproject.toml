@@ -17,6 +17,7 @@ members = [
     "nodes/dora-so101-teleop",
     "nodes/dora-so101-leader",
     "nodes/dora-so101-mujoco",
+    "nodes/dora-so101-follower",
 ]
 
 [tool.uv.sources]

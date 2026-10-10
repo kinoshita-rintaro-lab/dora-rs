@@ -12,7 +12,7 @@ JOINTS = (
 )
 
 def main() -> None:
-    leader = SO101Leader(SO101LeaderConfig(port="/dev/ttyACM0", id="so101-leader"))
+    leader = SO101Leader(SO101LeaderConfig(port="/dev/ttyACM1", id="so101-leader"))
     leader.connect(calibrate=False)
     node = Node()
     try:
