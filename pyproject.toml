@@ -8,8 +8,10 @@ dependencies = [
     "dora-rs-cli>=1.1.0",
     "dora-so101-leader",
     "dora-so101-mujoco",
-    "dora-so101-teleop",
+    "dora-so101-follower",
     "lerobot[feetech]>=0.6.1",
+    "opencv-plot>=0.5.0",
+    "opencv-video-capture>=0.5.0",
 ]
 
 [tool.uv.workspace]
@@ -18,9 +20,12 @@ members = [
     "nodes/dora-so101-leader",
     "nodes/dora-so101-mujoco",
     "nodes/dora-so101-follower",
+    "nodes/opencv-video-capture",
 ]
 
 [tool.uv.sources]
 dora-so101-teleop = { workspace = true }
 dora-so101-leader = { workspace = true }
+dora-so101-follower = { workspace = true }
 dora-so101-mujoco = { workspace = true }
+opencv-video-capture = { workspace = true }

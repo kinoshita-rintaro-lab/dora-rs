@@ -5,6 +5,8 @@ nodes:
       tick: dora/timer/millis/16 # 60fps
     outputs:
       - leader_cmd
+    env:
+      PORT: /dev/ttyACM1
 
   - id: mujoco
     path: dora-so101-mujoco

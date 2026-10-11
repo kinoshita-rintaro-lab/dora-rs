@@ -1,3 +1,5 @@
+import os
+
 import pyarrow as pa
 from dora import Node
 from lerobot.teleoperators.so_leader import SO101Leader, SO101LeaderConfig
@@ -12,7 +14,7 @@ JOINTS = (
 )
 
 def main() -> None:
-    leader = SO101Leader(SO101LeaderConfig(port="/dev/ttyACM1", id="so101-leader"))
+    leader = SO101Leader(SO101LeaderConfig(port=os.environ["PORT"], id="so101-leader"))
     leader.connect(calibrate=False)
     node = Node()
     try:
