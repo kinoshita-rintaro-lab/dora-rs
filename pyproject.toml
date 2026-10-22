@@ -9,9 +9,12 @@ dependencies = [
     "dora-so101-leader",
     "dora-so101-mujoco",
     "dora-so101-follower",
-    "lerobot[feetech]>=0.6.1",
+    "lerobot[feetech,dataset]>=0.6.1",
     "opencv-plot>=0.5.0",
     "opencv-video-capture>=0.5.0",
+    "dora-so101-rerun",
+    "dora-so101-inference",
+    "dora-so101-observer",
 ]
 
 [tool.uv.workspace]
@@ -21,6 +24,9 @@ members = [
     "nodes/dora-so101-mujoco",
     "nodes/dora-so101-follower",
     "nodes/opencv-video-capture",
+    "nodes/dora-so101-rerun",
+    "nodes/dora-so101-inference",
+    "nodes/dora-so101-observer",
 ]
 
 [tool.uv.sources]
@@ -29,3 +35,6 @@ dora-so101-leader = { workspace = true }
 dora-so101-follower = { workspace = true }
 dora-so101-mujoco = { workspace = true }
 opencv-video-capture = { workspace = true }
+dora-so101-rerun = { workspace = true }
+dora-so101-inference = { workspace = true }
+dora-so101-observer = { workspace = true }

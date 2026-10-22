@@ -1,0 +1,72 @@
+nodes:
+- id: leader
+  path: dora-so101-leader
+  inputs:
+    tick: dora/timer/millis/16
+  outputs:
+  - leader_cmd
+  env:
+    PORT: /dev/ttyACM0
+- id: follower
+  path: dora-so101-follower
+  inputs:
+    cmd: leader/leader_cmd
+  outputs:
+  - follower_state
+  env:
+    PORT: /dev/ttyACM1
+- id: wrist-camera
+  path: opencv-video-capture
+  inputs:
+    tick: dora/timer/millis/33
+  outputs:
+  - image
+  env:
+    CAPTURE_PATH: /dev/video6
+    IMAGE_WIDTH: 640
+    IMAGE_HEIGHT: 320
+    FOURCC: MJPG
+    ENCODING: jpeg
+- id: overhead-camera
+  path: opencv-video-capture
+  inputs:
+    tick: dora/timer/millis/33
+  outputs:
+  - image
+  env:
+    CAPTURE_PATH: /dev/video4
+    IMAGE_WIDTH: 640
+    IMAGE_HEIGHT: 320
+    FOURCC: MJPG
+    ENCODING: jpeg
+- id: rerun
+  path: dora-so101-rerun
+  inputs:
+    wrist: wrist-camera/image
+    overhead: overhead-camera/image
+    leader: leader/leader_cmd
+    follower: follower/follower_state
+  env:
+    IMAGES: overhead, wrist
+    ACTIONS: leader
+    OBSERVATIONS: follower
+    JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper
+- id: __dora_record__
+  path: dora-record-node
+  inputs:
+    follower___follower_state:
+      source: follower/follower_state
+      queue_size: 100
+    leader___leader_cmd:
+      source: leader/leader_cmd
+      queue_size: 100
+    overhead-camera___image:
+      source: overhead-camera/image
+      queue_size: 100
+    wrist-camera___image:
+      source: wrist-camera/image
+      queue_size: 100
+  env:
+    DORA_RECORD_FILE: ../record/ep1.drec
+    DORA_RECORD_TOPICS: '{"follower___follower_state":"follower/follower_state","leader___leader_cmd":"leader/leader_cmd","overhead-camera___image":"overhead-camera/image","wrist-camera___image":"wrist-camera/image"}'
+    DORA_RECORD_DESCRIPTOR: "nodes:\n  - id: leader\n    path: dora-so101-leader\n    inputs: \n      tick: dora/timer/millis/16 # 60fps\n    outputs:\n      - leader_cmd\n    env:\n      PORT: /dev/ttyACM0\n    \n  - id: follower\n    path: dora-so101-follower\n    inputs:\n      cmd: leader/leader_cmd\n    outputs:\n      - follower_state\n    env:\n      PORT: /dev/ttyACM1 \n  \n  - id: wrist-camera\n    path: opencv-video-capture\n    inputs:\n      tick: dora/timer/millis/33 # 30fps\n    outputs:\n      - image\n    env:\n      CAPTURE_PATH: /dev/video6\n      IMAGE_WIDTH: 640\n      IMAGE_HEIGHT: 320\n      FOURCC: MJPG\n      ENCODING: jpeg\n\n\n  - id: overhead-camera\n    path: opencv-video-capture\n    inputs:\n      tick: dora/timer/millis/33 # 30fps\n    outputs:\n      - image\n    env:\n      CAPTURE_PATH: /dev/video4\n      IMAGE_WIDTH: 640\n      IMAGE_HEIGHT: 320\n      FOURCC: MJPG\n      ENCODING: jpeg\n\n  # - id: wrist-image-viewer\n  #   path: opencv-plot\n  #   inputs:\n  #     image: wrist-camera/image\n\n  # - id: image-viewer-2\n  #   path: opencv-plot\n  #   inputs:\n  #     image: overhead-camera/image\n\n  - id: rerun\n    path: dora-so101-rerun\n    inputs:\n      wrist: wrist-camera/image\n      overhead: overhead-camera/image\n      leader: leader/leader_cmd\n      follower: follower/follower_state\n    env:\n      IMAGES: overhead, wrist\n      ACTIONS: leader\n      OBSERVATIONS: follower\n      JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper"

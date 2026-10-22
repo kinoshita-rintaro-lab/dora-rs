@@ -1,0 +1,69 @@
+nodes:
+  - id: wrist-camera
+    path: opencv-video-capture
+    inputs:
+      tick: dora/timer/hz/30
+    outputs:
+      - image
+    env:
+      CAPTURE_PATH: /dev/video6
+      IMAGE_WIDTH: 640
+      IMAGE_HEIGHT: 320
+      FOURCC: MJPG
+      ENCODING: jpeg
+
+  - id: overhead-camera
+    path: opencv-video-capture
+    inputs:
+      tick: dora/timer/hz/30
+    outputs:
+      - image
+    env:
+      CAPTURE_PATH: /dev/video4
+      IMAGE_WIDTH: 640
+      IMAGE_HEIGHT: 320
+      FOURCC: MJPG
+      ENCODING: jpeg
+
+  - id: observer
+    path: dora-so101-observer
+    inputs:
+      tick: dora/timer/hz/30
+      camera1: wrist-camera/image
+      camera2: overhead-camera/image
+      state: follower/follower_state
+    outputs:
+      - observation
+    env:
+      CAMERAS: camera1,camera2
+
+  - id: inference
+    path: dora-so101-inference
+    inputs:
+      tick: dora/timer/hz/30
+      observation: observer/observation
+    outputs:
+      - action
+
+  - id: follower
+    path: dora-so101-follower
+    inputs:
+      tick: dora/timer/hz/30
+      cmd: inference/action
+    outputs:
+      - follower_state
+    env:
+      PORT: /dev/ttyACM0
+
+  - id: rerun
+    path: dora-so101-rerun
+    inputs:
+      wrist: wrist-camera/image
+      overhead: overhead-camera/image
+      policy: inference/action
+      follower: follower/follower_state
+    env:
+      IMAGES: overhead, wrist
+      ACTIONS: policy
+      OBSERVATIONS: follower
+      JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper

@@ -10,4 +10,10 @@ wheels/
 .venv
 
 dataflow/out/
+dataflow/git
 out
+record
+dataset
+AGENTS.md
+DORA.md
+OBJECT.md
