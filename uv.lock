@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'AMD64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')",
@@ -16,6 +16,7 @@ members = [
     "dora-so101-leader",
     "dora-so101-mujoco",
     "dora-so101-observer",
+    "dora-so101-record",
     "dora-so101-rerun",
     "dora-so101-teleop",
     "opencv-video-capture",
@@ -649,6 +650,7 @@ dependencies = [
     { name = "dora-so101-leader" },
     { name = "dora-so101-mujoco" },
     { name = "dora-so101-observer" },
+    { name = "dora-so101-record" },
     { name = "dora-so101-rerun" },
     { name = "lerobot", extra = ["dataset", "feetech"] },
     { name = "opencv-plot" },
@@ -663,6 +665,7 @@ requires-dist = [
     { name = "dora-so101-leader", editable = "nodes/dora-so101-leader" },
     { name = "dora-so101-mujoco", editable = "nodes/dora-so101-mujoco" },
     { name = "dora-so101-observer", editable = "nodes/dora-so101-observer" },
+    { name = "dora-so101-record", editable = "nodes/dora-so101-record" },
     { name = "dora-so101-rerun", editable = "nodes/dora-so101-rerun" },
     { name = "lerobot", extras = ["feetech", "dataset"], specifier = ">=0.6.1" },
     { name = "opencv-plot", specifier = ">=0.5.0" },
@@ -754,6 +757,25 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "opencv-python", specifier = ">=4.1.1" },
     { name = "pyarrow", specifier = ">=25.0.1" },
+]
+
+[[package]]
+name = "dora-so101-record"
+version = "0.1.0"
+source = { editable = "nodes/dora-so101-record" }
+dependencies = [
+    { name = "dora-rs" },
+    { name = "numpy" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dora-rs", specifier = ">=1.1.0" },
+    { name = "numpy", specifier = ">=2.2.6" },
+    { name = "pyarrow", specifier = ">=25.0.1" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
 ]
 
 [[package]]

@@ -15,6 +15,7 @@ dependencies = [
     "dora-so101-rerun",
     "dora-so101-inference",
     "dora-so101-observer",
+    "dora-so101-record",
 ]
 
 [tool.uv.workspace]
@@ -27,6 +28,7 @@ members = [
     "nodes/dora-so101-rerun",
     "nodes/dora-so101-inference",
     "nodes/dora-so101-observer",
+    "nodes/dora-so101-record",
 ]
 
 [tool.uv.sources]
@@ -38,3 +40,4 @@ opencv-video-capture = { workspace = true }
 dora-so101-rerun = { workspace = true }
 dora-so101-inference = { workspace = true }
 dora-so101-observer = { workspace = true }
+dora-so101-record = { workspace = true }

@@ -1,0 +1,22 @@
+[project]
+name = "dora-so101-record"
+version = "0.1.0"
+description = "Record SO-101 episodes as timestamped per-stream files"
+readme = "README.md"
+authors = [
+    { name = "madamadamadao" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dora-rs>=1.1.0",
+    "numpy>=2.2.6",
+    "pyarrow>=25.0.1",
+    "pyyaml>=6.0.1",
+]
+
+[project.scripts]
+dora-so101-record = "dora_so101_record.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"

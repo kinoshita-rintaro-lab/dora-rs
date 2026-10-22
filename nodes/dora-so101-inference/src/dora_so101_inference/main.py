@@ -156,7 +156,7 @@ def main() -> None:
             with lock:
                 if pending:
                     action = pending.pop(0)
-                if not running and len(pending) <= 25 and _ready(latest, image_keys, needs_state):
+                if not running and len(pending) <= 35 and _ready(latest, image_keys, needs_state):
                     running = True
                     drop = len(pending) + (1 if action is not None else 0)
                     job = (dict(latest), drop)
