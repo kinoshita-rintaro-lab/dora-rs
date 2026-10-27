@@ -2,11 +2,12 @@ nodes:
   - id: leader
     path: dora-so101-leader
     inputs:
-      tick: dora/timer/hz/60
+      tick: dora/timer/hz/120
     outputs:
       - leader_cmd
     env:
-      PORT: /dev/ttyACM1
+      PORT: /dev/ttyACM0
+    restart_policy: on-failure
 
   - id: follower
     path: dora-so101-follower
@@ -15,7 +16,10 @@ nodes:
     outputs:
       - follower_state
     env:
-      PORT: /dev/ttyACM0
+      PORT: /dev/ttyACM1 
+    restart_policy: on-failure
+    max_restarts: 5
+    startup_timeout: 3.0
 
   - id: wrist-camera
     path: opencv-video-capture
@@ -29,6 +33,7 @@ nodes:
       IMAGE_HEIGHT: 320
       FOURCC: MJPG
       ENCODING: jpeg
+    restart_policy: on-failure
 
   - id: overhead-camera
     path: opencv-video-capture
@@ -42,6 +47,7 @@ nodes:
       IMAGE_HEIGHT: 320
       FOURCC: MJPG
       ENCODING: jpeg
+    restart_policy: on-failure
 
   - id: rerun
     path: dora-so101-rerun
@@ -56,21 +62,35 @@ nodes:
       OBSERVATIONS: follower
       JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper
 
-  # One dataflow run records one episode: recording starts with the
-  # graph (AUTO_START) and finishes when the graph stops. The episode
-  # number is the next free number in the dataset, so restarting the
-  # graph records the next episode. AUTO_FINISH decides the success
-  # flag written for the automatically finished episode.
+  # Recording is controlled from the web UI (record-ui): Start begins
+  # an episode, End saves it, and the page then asks for success or
+  # fail unless that prompt is unchecked. Open http://127.0.0.1:8080
+  # while the graph runs.
   - id: record
     path: dora-so101-record
     inputs:
-      action: leader/leader_cmd
-      state: follower/follower_state
+      command: record-ui/command
+      cmd: leader/leader_cmd
+      follower: follower/follower_state
       camera_wrist: wrist-camera/image
       camera_overhead: overhead-camera/image
+    outputs:
+      - status
     env:
       DIRECTORY: ../record
-      NAME: so101
-      TASK: Pick up the cube and place it in the box
-      AUTO_START: "true"
-      AUTO_FINISH: success
+      NAME: pick-and-place
+      TASK: Pick up the cube from the left box and place it in the right box.
+
+  - id: record-ui
+    path: dora-so101-ui
+    inputs:
+      tick: dora/timer/hz/10
+      status: record/status
+    outputs:
+      - command
+    env:
+      UI_HOST: 127.0.0.1
+      UI_PORT: "8080"
+      TASK_LIBRARY: ../record/task-library.json
+      TASK: Pick up the cube from the left box and place it in the right box.
+      RESULT_PROMPT: "on"

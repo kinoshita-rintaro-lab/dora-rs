@@ -1,0 +1,12 @@
+nodes:
+  - id: record-ui
+    path: dora-so101-ui
+    inputs:
+      tick: dora/timer/hz/10
+    outputs:
+      - command
+    env:
+      UI_HOST: 127.0.0.1
+      UI_PORT: "8080"
+      TASK: Pick up the cube and place it in the box
+      RESULT_PROMPT: "on"

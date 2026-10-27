@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SO-101 Recorder</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ece7f5;
+    background: linear-gradient(160deg, #211736 0%, #2e2148 100%);
+  }
+  .panel {
+    width: min(680px, 92vw);
+    text-align: center;
+    background: rgba(43, 32, 66, 0.92);
+    border: 1px solid rgba(190, 170, 230, 0.25);
+    border-radius: 16px;
+    padding: 2em;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  h1 {
+    font-size: 1.5em;
+    margin: 0 0 0.6em;
+    letter-spacing: 0.05em;
+    color: #d9cbf3;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.3em 1em;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #ddd6ea;
+    background: rgba(120, 113, 140, 0.35);
+    border: 1px solid rgba(220, 210, 240, 0.35);
+  }
+  .badge.recording {
+    color: #f6dbe4;
+    background: rgba(157, 43, 82, 0.5);
+    border-color: #c96a8b;
+  }
+  .badge.idle {
+    color: #d8ecdf;
+    background: rgba(46, 94, 64, 0.5);
+    border-color: #6fae86;
+  }
+  .badge.pending {
+    color: #f3e8d2;
+    background: rgba(133, 94, 38, 0.5);
+    border-color: #c2a15e;
+  }
+  .row { margin: 1.1em 0; }
+  #dataset { display: block; margin-top: 0.5em; overflow-wrap: anywhere; }
+  #episode { font-size: 1.25em; font-weight: 700; color: #e2d8f5; }
+  #counts { color: #b3a6d6; font-variant-numeric: tabular-nums; }
+  button {
+    font-size: 1em;
+    font-weight: 600;
+    padding: 0.5em 1.3em;
+    margin: 0.2em 0.3em;
+    color: #ece7f7;
+    background: #453364;
+    border: 1px solid #7768a3;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  button:hover:not(:disabled) { background: #52407a; border-color: #9788c2; }
+  button:active:not(:disabled) { background: #3c2c5c; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #d6c8f5; outline-offset: 2px; }
+  kbd {
+    font: inherit;
+    font-size: 0.85em;
+    margin-left: 0.35em;
+    padding: 0 0.35em;
+    border: 1px solid currentColor;
+    border-radius: 0.3em;
+    opacity: 0.8;
+  }
+  #start { border-color: #5f9e79; color: #cfe9da; background: #2f4a3c; }
+  #start:hover:not(:disabled) { background: #385c49; border-color: #79b892; }
+  #end { border-color: #a06ba0; color: #ecd9ec; background: #4c3350; }
+  #end:hover:not(:disabled) { background: #5b4060; border-color: #bb8abb; }
+  #cancel { border-color: #a3705f; color: #ecdcd4; background: #4a3833; }
+  #cancel:hover:not(:disabled) { background: #59443d; border-color: #bd8f7d; }
+  #markSuccess { border-color: #5d8fa8; color: #d8e9f1; background: #31434f; }
+  #markSuccess:hover:not(:disabled) { background: #3d5261; border-color: #7dabc2; }
+  #markFail { border-color: #a86a76; color: #f0dde1; background: #4c363d; }
+  #markFail:hover:not(:disabled) { background: #5b424a; border-color: #c08a95; }
+  #judge {
+    border: 1px solid rgba(194, 161, 94, 0.4);
+    border-radius: 12px;
+    padding: 0.9em;
+    background: rgba(120, 90, 40, 0.15);
+  }
+  #error { color: #e5a3b1; white-space: pre-wrap; }
+  input[type=text] {
+    width: 100%;
+    font-size: 1em;
+    text-align: center;
+    padding: 0.55em;
+    color: #ece7f5;
+    background: rgba(28, 20, 44, 0.85);
+    border: 1px solid rgba(170, 150, 215, 0.4);
+    border-radius: 10px;
+  }
+  input[type=text]:focus { outline: none; border-color: #a68fd0; }
+  input[type=checkbox] { accent-color: #8b76c2; width: 1.1em; height: 1.1em; vertical-align: middle; }
+  label { color: #cfc4e8; }
+  .note { color: #a99cc9; font-size: 0.9em; }
+  .group-box, #taskRow { text-align: left; }
+  .group-box {
+    border: 1px solid rgba(190, 170, 230, 0.35);
+    border-radius: 12px;
+    padding: 0.75em 0.9em 0.85em;
+    background: rgba(28, 20, 44, 0.35);
+  }
+  .group-box .label, #taskRow .label { display: block; margin: 0.75em 0 0.35em; }
+  .group-bar { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; }
+  .group-bar label { margin: 0; }
+  .group-bar select, .group-bar input[type=text] { width: auto; flex: 1; min-width: 7em; text-align: left; }
+  select {
+    font-size: 1em;
+    padding: 0.55em;
+    color: #ece7f5;
+    background: rgba(28, 20, 44, 0.85);
+    border: 1px solid rgba(170, 150, 215, 0.4);
+    border-radius: 10px;
+  }
+  .group-bar button, #sentenceTabs button, #searchHits button { font-size: 0.9em; padding: 0.4em 0.75em; }
+  #taskSearch, #groupName { text-align: left; }
+  .task-line { display: flex; gap: 0.4em; align-items: center; }
+  .task-line input[type=text] { width: auto; flex: 1; min-width: 10em; }
+  .sentence-tabs { display: flex; flex-wrap: nowrap; gap: 0.25em; overflow-x: auto; max-width: 48%; }
+  .num {
+    display: inline-flex;
+    flex: 0 0 auto;
+    border: 1px solid #7768a3;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #453364;
+  }
+  .num.active { background: #5c4788; border-color: #c4b0ea; }
+  .num button { margin: 0; border: 0; border-radius: 0; background: transparent; padding: 0.35em 0.45em; }
+  .num button.x { color: #e5a3b1; padding-left: 0.15em; }
+  #searchHits { max-height: 6.5em; overflow: auto; }
+  #searchHits button {
+    display: block;
+    width: 100%;
+    margin: 0.2em 0;
+    text-align: left;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 8px;
+  }
+  #searchHits button .where { color: #c4b0ea; }
+  #otherTasks.active { background: #5c4788; border-color: #c4b0ea; }
+  #otherList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    max-height: 9em;
+    margin-top: 0.45em;
+    overflow: auto;
+  }
+  #otherList[hidden] { display: none; }
+  #otherList button {
+    margin: 0;
+    border-radius: 10px;
+    font-weight: 500;
+    text-align: left;
+    white-space: normal;
+  }
+</style>
+</head>
+<body>
+<main class="panel">
+<h1>SO-101 Recorder</h1>
+<div class="row">
+  <span id="badge" class="badge">waiting for recorder</span>
+  <span id="dataset" class="note"></span>
+</div>
+<div class="row note">Robot is live while the dataflow runs. Recording is controlled separately below.</div>
+<div class="row group-box" id="groupBox">
+  <div class="group-bar">
+    <label for="groupSelect">Group</label>
+    <select id="groupSelect"></select>
+    <label for="groupName">Name</label>
+    <input type="text" id="groupName" autocomplete="off">
+    <button type="button" id="addGroup">Add</button>
+    <button type="button" id="deleteGroup">Delete</button>
+  </div>
+  <label class="label" for="taskSearch">Search saved tasks</label>
+  <input type="text" id="taskSearch" placeholder="Find a saved task" autocomplete="off">
+  <div id="searchHits"></div>
+</div>
+<div class="row" id="taskRow">
+  <label class="label" for="task">Task</label>
+  <div class="task-line">
+    <input type="text" id="task" autocomplete="off">
+    <button type="button" id="otherTasks" aria-expanded="false">Other</button>
+    <div class="sentence-tabs" id="sentenceTabs"></div>
+  </div>
+  <div id="otherList" hidden></div>
+</div>
+<div class="row" id="episode"></div>
+<div class="row" id="counts"></div>
+<div class="row">
+  <button id="start">Start <kbd>1</kbd></button>
+  <button id="end">End <kbd>2</kbd></button>
+  <button id="cancel">Cancel <kbd>3</kbd></button>
+</div>
+<div class="row" id="judge" hidden>
+  <span id="judgeLabel"></span>
+  <button id="markSuccess">Success <kbd>S</kbd></button>
+  <button id="markFail">Fail <kbd>F</kbd></button>
+</div>
+<div class="row">
+  <label><input type="checkbox" id="resultPrompt"> Ask success / fail after End</label>
+</div>
+<div class="row" id="error"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const promptBox = $("resultPrompt");
+const stored = localStorage.getItem("record-ui-result-prompt");
+if (stored !== null) promptBox.checked = stored === "1";
+promptBox.addEventListener("change", () =>
+  localStorage.setItem("record-ui-result-prompt", promptBox.checked ? "1" : "0"));
+
+async function post(body) {
+  await fetch("/api/command", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)});
+  refresh();
+}
+const LIBRARY_KEY = "record-ui-task-library";
+
+function newId() {
+  return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
+}
+
+function loadLibrary() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LIBRARY_KEY) || "");
+    if (parsed && Array.isArray(parsed.groups) && parsed.groups.length)
+      return parsed;
+  } catch (e) {}
+  return {active: "group-1", groups: [{id: "group-1", name: "Group 1", tasks: []}]};
+}
+
+function nextGroupName() {
+  return "Group " + (library.groups.length + 1);
+}
+
+let libraryGeneration = 0;
+
+function saveLibrary() {
+  libraryGeneration += 1;
+  localStorage.setItem(LIBRARY_KEY, JSON.stringify(library));
+  fetch("/api/library", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(library),
+  }).catch(() => {});
+}
+
+function libraryHasContent(data) {
+  return data.groups.length > 1 || data.groups.some(group =>
+    (group.tasks || []).length || (group.name && group.name !== "Group 1"));
+}
+
+async function syncLibrary() {
+  const generation = libraryGeneration;
+  let data;
+  try {
+    data = await (await fetch("/api/library")).json();
+  } catch (e) {
+    return;
+  }
+  if (generation !== libraryGeneration) return;
+  if (data && data.stored && Array.isArray(data.groups) && data.groups.length) {
+    library = {active: data.active, groups: data.groups};
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(library));
+    renderLibrary();
+    return;
+  }
+  if (libraryHasContent(library)) saveLibrary();
+}
+
+let library = loadLibrary();
+let otherOpen = false;
+
+function activeGroup() {
+  return library.groups.find(group => group.id === library.active) || library.groups[0];
+}
+
+function queryText() {
+  return $("taskSearch").value.trim().toLowerCase();
+}
+
+function visibleTasks(current) {
+  const query = queryText();
+  const rows = [];
+  const groups = query ? library.groups : [current];
+  for (const group of groups) {
+    for (const task of group.tasks) {
+      if (!query || task.toLowerCase().includes(query))
+        rows.push({task, group});
+    }
+  }
+  return rows;
+}
+
+function renderLibrary() {
+  const current = activeGroup();
+  library.active = current.id;
+  const select = $("groupSelect");
+  select.replaceChildren();
+  for (const group of library.groups) {
+    const option = document.createElement("option");
+    option.value = group.id;
+    option.textContent = group.name.trim() || "Group";
+    option.selected = group.id === current.id;
+    select.append(option);
+  }
+  if (document.activeElement !== $("groupName"))
+    $("groupName").value = current.name;
+
+  const hits = $("searchHits");
+  const sentences = $("sentenceTabs");
+  hits.replaceChildren();
+  sentences.replaceChildren();
+  const typed = $("task").value.trim();
+  const searching = queryText() !== "";
+  if (searching) {
+    const rows = visibleTasks(current);
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "note";
+      empty.textContent = "No saved tasks match.";
+      hits.append(empty);
+    }
+    for (const row of rows) {
+      const button = document.createElement("button");
+      button.type = "button";
+      const where = document.createElement("span");
+      where.className = "where";
+      where.textContent = row.group.name.trim() || "Group";
+      button.append(where, document.createTextNode(" — " + row.task));
+      button.title = row.task;
+      button.onclick = () => {
+        library.active = row.group.id;
+        $("task").value = row.task;
+        $("taskSearch").value = "";
+        saveLibrary();
+        renderLibrary();
+      };
+      hits.append(button);
+    }
+  }
+  current.tasks.forEach((task, index) => {
+    const chip = document.createElement("span");
+    chip.className = "num" + (task === typed ? " active" : "");
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.textContent = String(index + 1);
+    pick.title = task;
+    pick.setAttribute("aria-label", "Task " + (index + 1) + ": " + task);
+    pick.onclick = () => { $("task").value = task; renderLibrary(); };
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "x";
+    del.textContent = "×";
+    del.title = "Delete task " + (index + 1);
+    del.setAttribute("aria-label", "Delete task " + (index + 1));
+    del.onclick = () => {
+      current.tasks = current.tasks.filter(item => item !== task);
+      saveLibrary();
+      renderLibrary();
+    };
+    chip.append(pick, del);
+    sentences.append(chip);
+  });
+  if (typed && !current.tasks.includes(typed)) {
+    const save = document.createElement("button");
+    save.type = "button";
+    save.id = "saveTask";
+    save.textContent = "Save";
+    save.onclick = () => {
+      current.tasks.push(typed);
+      saveLibrary();
+      renderLibrary();
+    };
+    sentences.append(save);
+  }
+  const locked = $("task").disabled;
+  const others = current.tasks.filter(task => task !== typed);
+  const otherButton = $("otherTasks");
+  const otherList = $("otherList");
+  otherButton.classList.toggle("active", otherOpen);
+  otherButton.setAttribute("aria-expanded", otherOpen ? "true" : "false");
+  otherButton.disabled = locked || !current.tasks.length;
+  otherList.replaceChildren();
+  otherList.hidden = !otherOpen;
+  if (otherOpen) {
+    if (!others.length) {
+      const empty = document.createElement("div");
+      empty.className = "note";
+      empty.textContent = "No other saved tasks in this group.";
+      otherList.append(empty);
+    }
+    for (const task of others) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = task;
+      button.onclick = () => {
+        $("task").value = task;
+        otherOpen = false;
+        renderLibrary();
+      };
+      otherList.append(button);
+    }
+  }
+  for (const button of sentences.querySelectorAll("button")) button.disabled = locked;
+  for (const button of hits.querySelectorAll("button")) button.disabled = locked;
+  for (const button of otherList.querySelectorAll("button")) button.disabled = locked;
+}
+
+function deleteGroup(group) {
+  if (!confirm("Delete group “" + group.name + "” and its tasks?")) return;
+  library.groups = library.groups.filter(item => item.id !== group.id);
+  if (!library.groups.length)
+    library.groups.push({id: newId(), name: nextGroupName(), tasks: []});
+  if (!library.groups.some(item => item.id === library.active))
+    library.active = library.groups[0].id;
+  saveLibrary();
+  renderLibrary();
+}
+
+$("groupSelect").addEventListener("change", () => {
+  library.active = $("groupSelect").value;
+  $("taskSearch").value = "";
+  saveLibrary();
+  renderLibrary();
+});
+$("groupName").addEventListener("input", () => {
+  const group = activeGroup();
+  group.name = $("groupName").value;
+  const option = $("groupSelect").selectedOptions[0];
+  if (option) option.textContent = group.name.trim() || "Group";
+  saveLibrary();
+});
+$("groupName").addEventListener("blur", () => {
+  const group = activeGroup();
+  const name = $("groupName").value.trim();
+  group.name = name || ("Group " + (library.groups.indexOf(group) + 1));
+  $("groupName").value = group.name;
+  saveLibrary();
+  renderLibrary();
+});
+$("addGroup").onclick = () => {
+  const group = {id: newId(), name: nextGroupName(), tasks: []};
+  library.groups.push(group);
+  library.active = group.id;
+  $("taskSearch").value = "";
+  saveLibrary();
+  renderLibrary();
+};
+$("deleteGroup").onclick = () => deleteGroup(activeGroup());
+$("otherTasks").onclick = () => {
+  otherOpen = !otherOpen;
+  renderLibrary();
+};
+
+renderLibrary();
+syncLibrary();
+$("task").addEventListener("input", renderLibrary);
+$("taskSearch").addEventListener("input", renderLibrary);
+
+$("start").onclick = () => post({command: "start", task: $("task").value, task_index: 0});
+$("end").onclick = () => post({command: promptBox.checked ? "end" : "success"});
+$("markSuccess").onclick = () => post({command: "mark_success"});
+$("markFail").onclick = () => post({command: "mark_fail"});
+let awaitingResult = false;
+$("cancel").onclick = () => {
+  const message = awaitingResult ? "Skip this episode and delete the save?" : "Discard this episode?";
+  if (confirm(message)) post({command: "cancel"});
+};
+
+function fmtElapsed(startedNs) {
+  if (!startedNs) return "";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - startedNs / 1e9));
+  return " · " + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+async function refresh() {
+  let data;
+  try { data = await (await fetch("/api/status")).json(); }
+  catch (e) { return; }
+  if (stored === null && data.result_prompt_default !== undefined)
+    promptBox.checked = !!data.result_prompt_default;
+  if (document.activeElement !== $("task") && data.task_default && !$("task").value) {
+    $("task").value = data.task_default;
+    renderLibrary();
+  }
+  const st = data.status;
+  const badge = $("badge");
+  if (!st) {
+    badge.textContent = "waiting for recorder";
+    badge.className = "badge";
+    for (const id of ["start", "end", "cancel", "markSuccess", "markFail"]) $(id).disabled = true;
+    return;
+  }
+  const pending = st.pending_result_episode;
+  const recording = st.state === "recording";
+  awaitingResult = pending !== null && pending !== undefined;
+  badge.textContent = recording ? "● REC" : (pending !== null && pending !== undefined ? "saved — waiting for result" : "idle");
+  badge.className = "badge " + (recording ? "recording" : (pending != null ? "pending" : "idle"));
+  $("dataset").textContent = st.dataset || "";
+  $("episode").textContent = recording ? "Episode " + st.episode + fmtElapsed(st.started_at_ns)
+    : (pending != null ? "Episode " + pending + " saved" : "Next episode " + st.episode);
+  const c = st.counts || {};
+  const cams = Object.entries(c.cameras || {}).map(([k, v]) => k + " " + v).join(" · ");
+  $("counts").textContent = "cmd " + (c.cmd || c.action || 0) + " · follower " + (c.follower || c.state || 0) + (cams ? " · " + cams : "");
+  $("judge").hidden = pending === null || pending === undefined;
+  if (pending != null) $("judgeLabel").textContent = "Episode " + pending + " result: ";
+  $("start").disabled = recording || pending != null;
+  $("end").disabled = !recording;
+  $("cancel").disabled = !recording && !awaitingResult;
+  $("markSuccess").disabled = pending === null || pending === undefined;
+  $("markFail").disabled = pending === null || pending === undefined;
+  const locked = recording || pending != null;
+  if ($("task").disabled !== locked) {
+    $("task").disabled = locked;
+    renderLibrary();
+  }
+  $("error").textContent = st.last_error || "";
+  if (document.activeElement === document.body) {
+    const list = focusables();
+    const target = list.find(el => el.id !== "task" && el.id !== "taskSearch" && el.id !== "groupName") || list[0];
+    if (target) target.focus();
+  }
+}
+const focusables = () =>
+  [$("groupSelect"), $("groupName"), $("addGroup"), $("deleteGroup"), $("taskSearch"), ...$("searchHits").querySelectorAll("button"), $("task"), $("otherTasks"), ...$("sentenceTabs").querySelectorAll("button"), ...$("otherList").querySelectorAll("button"), $("start"), $("end"), $("cancel"), $("markSuccess"), $("markFail"), $("resultPrompt")]
+    .filter((el, index, all) => all.indexOf(el) === index && !el.disabled && el.offsetParent !== null);
+
+const commandKeys = { "1": "start", "2": "end", "3": "cancel", s: "markSuccess", f: "markFail" };
+
+document.addEventListener("keydown", e => {
+  const commandId = commandKeys[e.key.toLowerCase()];
+  const field = document.activeElement;
+  const typing = field && (field.tagName === "TEXTAREA" || field.isContentEditable || (field.tagName === "INPUT" && field.type !== "checkbox"));
+  if (commandId && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat) {
+    const button = $(commandId);
+    if (button && !button.disabled) {
+      e.preventDefault();
+      button.click();
+    }
+    return;
+  }
+  const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
+  const backward = e.key === "ArrowUp" || e.key === "ArrowLeft";
+  if (!forward && !backward) return;
+  if (document.activeElement === $("groupSelect")) return;
+  const editing = document.activeElement === $("task") || document.activeElement === $("taskSearch") || document.activeElement === $("groupName");
+  if (editing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+  const list = focusables();
+  if (!list.length) return;
+  e.preventDefault();
+  const current = list.indexOf(document.activeElement);
+  const next = forward
+    ? list[current < 0 ? 0 : (current + 1) % list.length]
+    : list[current < 0 ? list.length - 1 : (current - 1 + list.length) % list.length];
+  next.focus();
+});
+
+refresh();
+setInterval(refresh, 500);
+</script>
+</body>
+</html>

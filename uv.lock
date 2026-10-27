@@ -19,6 +19,7 @@ members = [
     "dora-so101-record",
     "dora-so101-rerun",
     "dora-so101-teleop",
+    "dora-so101-ui",
     "opencv-video-capture",
 ]
 
@@ -652,6 +653,7 @@ dependencies = [
     { name = "dora-so101-observer" },
     { name = "dora-so101-record" },
     { name = "dora-so101-rerun" },
+    { name = "dora-so101-ui" },
     { name = "lerobot", extra = ["dataset", "feetech"] },
     { name = "opencv-plot" },
     { name = "opencv-video-capture" },
@@ -667,6 +669,7 @@ requires-dist = [
     { name = "dora-so101-observer", editable = "nodes/dora-so101-observer" },
     { name = "dora-so101-record", editable = "nodes/dora-so101-record" },
     { name = "dora-so101-rerun", editable = "nodes/dora-so101-rerun" },
+    { name = "dora-so101-ui", editable = "nodes/dora-so101-ui" },
     { name = "lerobot", extras = ["feetech", "dataset"], specifier = ">=0.6.1" },
     { name = "opencv-plot", specifier = ">=0.5.0" },
     { name = "opencv-video-capture", editable = "nodes/opencv-video-capture" },
@@ -805,6 +808,21 @@ requires-dist = [
 name = "dora-so101-teleop"
 version = "0.1.0"
 source = { editable = "nodes/dora-so101-teleop" }
+
+[[package]]
+name = "dora-so101-ui"
+version = "0.1.0"
+source = { editable = "nodes/dora-so101-ui" }
+dependencies = [
+    { name = "dora-rs" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dora-rs", specifier = ">=1.1.0" },
+    { name = "pyarrow", specifier = ">=25.0.1" },
+]
 
 [[package]]
 name = "draccus"

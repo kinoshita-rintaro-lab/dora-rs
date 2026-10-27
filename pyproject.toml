@@ -16,6 +16,7 @@ dependencies = [
     "dora-so101-inference",
     "dora-so101-observer",
     "dora-so101-record",
+    "dora-so101-ui",
 ]
 
 [tool.uv.workspace]
@@ -29,6 +30,7 @@ members = [
     "nodes/dora-so101-inference",
     "nodes/dora-so101-observer",
     "nodes/dora-so101-record",
+    "nodes/dora-so101-ui",
 ]
 
 [tool.uv.sources]
@@ -41,3 +43,4 @@ dora-so101-rerun = { workspace = true }
 dora-so101-inference = { workspace = true }
 dora-so101-observer = { workspace = true }
 dora-so101-record = { workspace = true }
+dora-so101-ui = { workspace = true }

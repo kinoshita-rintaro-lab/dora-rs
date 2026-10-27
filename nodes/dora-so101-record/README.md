@@ -12,8 +12,8 @@ synchronized or resampled.
 | Input id | Content |
 | --- | --- |
 | `command` | Episode control string, see below |
-| `action` | `float32` joint vector, e.g. `leader/leader_cmd` |
-| `state` | `float32` joint vector, e.g. `follower/follower_state` |
+| `cmd` | `float32` joint vector, e.g. `leader/leader_cmd` |
+| `follower` | `float32` joint vector, e.g. `follower/follower_state` |
 | `camera_<name>` | Encoded image, e.g. `camera_wrist: wrist-camera/image` |
 
 `command` is a string array whose first element is one of `start`,
@@ -21,8 +21,23 @@ synchronized or resampled.
 `episode_number`, `task_index`, and `task` metadata; without
 `episode_number` the next free number is used.
 
+Two more commands support marking the result after saving, as the
+web UI (`dora-so101-ui`) does: `end` finishes the episode with the
+result pending (`success: null` in `metadata.yaml`), and
+`mark_success` / `mark_fail` then write the result of the pending
+episode. `success` and `fail` remain the one-step form of end plus
+marking. `cancel` during that wait deletes the pending episode and
+its files. During recording, `cancel` still drops the episode before
+it is written to the dataset.
+
+The node also has a `status` output: one JSON string describing the
+current state (`idle` or `recording`), episode number, task, start
+time, per-stream counts, the episode waiting for a result if any, the
+dataset path, and the last error. It is sent on every state change
+and about once a second while recording.
+
 Timestamps come from each event's `timestamp` metadata (`datetime` is
-converted to POSIX nanoseconds). `state` prefers
+converted to POSIX nanoseconds). `follower` prefers
 `observation_timestamp` when present. Events without a timestamp use
 the receive time.
 
@@ -53,16 +68,22 @@ for failure) decides the success flag of that episode.
 {DIRECTORY}/{NAME}/
   metadata.yaml
   episodes/{number}/
-    action/state.parquet   # timestamp, value: list<float32>
-    obs/state.parquet      # timestamp, value: list<float32>
+    cmd/state.parquet        # timestamp, value: list<float32>
+    follower/state.parquet   # timestamp, value: list<float32>
     cameras/{name}/{timestamp}.{encoding}
 ```
+
+The streams stay on their own timestamps. `action` is not a stored
+stream; `tools/record2lerobot.py` maps `cmd` to the LeRobot action and
+`follower` to `observation.state`.
 
 `metadata.yaml` holds the dataset format version, robot and joint
 names, best-effort input frequencies, and one entry per finished
 episode with its success flag, task, and per-stream frame counts.
 Reusing a dataset directory resumes its episode list; recording an
-episode number that already exists is an error.
+episode number that already exists is an error. Frequencies are
+rewritten from the current graph and are not compared with the
+existing file.
 
 ## Example
 
@@ -71,8 +92,8 @@ episode number that already exists is an error.
     path: dora-so101-record
     inputs:
       command: command/command
-      action: leader/leader_cmd
-      state: follower/follower_state
+      cmd: leader/leader_cmd
+      follower: follower/follower_state
       camera_wrist: wrist-camera/image
       camera_overhead: overhead-camera/image
     env:
