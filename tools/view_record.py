@@ -1,9 +1,7 @@
 """Open one recorded episode in Rerun on the episode clock.
 
 cmd is the leader command and follower is the measured joint state. Each
-joint is its own series, and each camera stays on its own timestamps, so the
-streams can be compared without resampling. Older episodes stored these as
-action/ and obs/.
+joint is its own series. Older episodes stored these as action/ and obs/.
 
     uv run tools/view_record.py record/so101 --episode 0
     uv run tools/view_record.py record/so101/episodes/0
@@ -186,72 +184,52 @@ def _report(cmd: list[int], follower: list[int], cameras: dict[str, tuple[list[i
         print(f"  {start_s:.3f} s to {end_s:.3f} s")
 
 
-def _lane(joints: list[str], side: str, joint: str | None, cameras: list[str]) -> float:
-    if joint is None:
-        return float(len(joints) * 2 + cameras.index(side))
-    offset = 0 if side == "cmd" else len(joints)
-    return float(offset + joints.index(joint))
-
-
 def _points(path: str) -> None:
     rr.log(path, rr.SeriesPoints(markers=MarkerShape.Circle, marker_sizes=3), static=True)
 
 
 def _layout(joints: list[str], cameras: list[str]) -> None:
-    camera_views = rrb.Vertical(*[rrb.Spatial2DView(origin=f"observation/{name}", name=name) for name in cameras])
-    joint_views = rrb.Vertical(
-        *[
-            rrb.TimeSeriesView(
-                name=joint,
-                contents=[f"joints/cmd/{joint}", f"joints/follower/{joint}"],
+    views = []
+    if cameras:
+        views.append(
+            rrb.Vertical(*[rrb.Spatial2DView(origin=f"observation/{name}", name=name) for name in cameras])
+        )
+    if joints:
+        views.append(
+            rrb.Vertical(
+                *[
+                    rrb.TimeSeriesView(
+                        name=joint,
+                        contents=[f"joints/cmd/{joint}", f"joints/follower/{joint}"],
+                    )
+                    for joint in joints
+                ]
             )
-            for joint in joints
-        ]
-    )
-    timestamps = rrb.TimeSeriesView(
-        name="timestamps",
-        contents=[f"time/cmd/{joint}" for joint in joints]
-        + [f"time/follower/{joint}" for joint in joints]
-        + [f"time/{name}" for name in cameras],
-    )
-    contents = [view for view in (camera_views, joint_views, timestamps) if view is not None]
-    rr.send_blueprint(rrb.Blueprint(rrb.Horizontal(*contents, column_shares=[2, 3, 3][: len(contents)])))
+        )
+    if not views:
+        return
+    rr.send_blueprint(rrb.Blueprint(rrb.Horizontal(*views, column_shares=[2, 3][: len(views)])))
 
 
-def _log_mark(origin: int, side: str, joint: str | None, stamp_ns: int, joints: list[str], cameras: list[str]) -> None:
-    path = f"time/{side}" if joint is None else f"time/{side}/{joint}"
-    event = f"events/{side}" if joint is None else f"events/{side}/{joint}"
-    lane = _lane(joints, side, joint, cameras)
-    rr.set_time("record", duration=(stamp_ns - origin) / 1e9)
-    rr.log(path, rr.Scalars(lane))
-    rr.log(event, rr.Points2D([[0.0, lane]]))
-
-
-def _log_joints(origin: int, side: str, stamp_ns: int, values: np.ndarray, joints: list[str], cameras: list[str]) -> None:
+def _log_joints(origin: int, side: str, stamp_ns: int, values: np.ndarray, joints: list[str]) -> None:
     if values.size != len(joints):
         raise SystemExit(f"{side} has {values.size} values; expected {len(joints)} joints")
     rr.set_time("record", duration=(stamp_ns - origin) / 1e9)
     for joint, value in zip(joints, values, strict=True):
         rr.log(f"joints/{side}/{joint}", rr.Scalars(float(value)))
-        _log_mark(origin, side, joint, stamp_ns, joints, cameras)
 
 
 def _log(origin: int, cmd: tuple[list[int], list[np.ndarray]], follower: tuple[list[int], list[np.ndarray]], cameras: dict[str, tuple[list[int], list[Path]]], joints: list[str]) -> None:
-    camera_names = list(cameras)
     for joint in joints:
         for side in ("cmd", "follower"):
             _points(f"joints/{side}/{joint}")
-            _points(f"time/{side}/{joint}")
-    for name in camera_names:
-        _points(f"time/{name}")
     for stamp_ns, values in zip(*cmd, strict=True):
-        _log_joints(origin, "cmd", stamp_ns, values, joints, camera_names)
+        _log_joints(origin, "cmd", stamp_ns, values, joints)
     for stamp_ns, values in zip(*follower, strict=True):
-        _log_joints(origin, "follower", stamp_ns, values, joints, camera_names)
+        _log_joints(origin, "follower", stamp_ns, values, joints)
     failed = 0
     for name, (times, paths) in cameras.items():
         for stamp_ns, path in zip(times, paths, strict=True):
-            _log_mark(origin, name, None, stamp_ns, joints, camera_names)
             frame = _decode(path)
             if frame is None:
                 failed += 1

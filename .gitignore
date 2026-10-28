@@ -13,7 +13,7 @@ dataflow/out/
 dataflow/git
 out
 record
-dataset
+datasets
 AGENTS.md
 DORA.md
 OBJECT.md

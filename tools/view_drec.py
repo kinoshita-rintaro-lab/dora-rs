@@ -1,8 +1,7 @@
 """Open a `.drec` recording in Rerun on the file's shared clock.
 
 Each message stays at its own arrival time. Every joint is its own point
-series for leader and for follower, so their timestamps can be compared
-one joint at a time.
+series for leader and for follower.
 
     uv run tools/view_drec.py record/test1/ep2.drec
 """
@@ -39,11 +38,6 @@ LEADER = "leader/leader_cmd"
 FOLLOWER = "follower/follower_state"
 WRIST = "wrist-camera/image"
 OVERHEAD = "overhead-camera/image"
-# Y value in the timestamp plot. It only keeps the rows from sitting on top of each other.
-def _lane(side: str, joint: str | None = None) -> float:
-    if joint is None:
-        return float(len(JOINTS) * 2 + (0 if side == "wrist" else 1))
-    return float(JOINTS.index(joint) + (0 if side == "leader" else len(JOINTS)))
 
 
 @dataclass(frozen=True)
@@ -200,46 +194,27 @@ def _layout() -> None:
             for joint in JOINTS
         ]
     )
-    timestamps = rrb.TimeSeriesView(
-        name="timestamps",
-        contents=[f"time/leader/{joint}" for joint in JOINTS]
-        + [f"time/follower/{joint}" for joint in JOINTS]
-        + ["time/wrist", "time/overhead"],
-    )
-    rr.send_blueprint(rrb.Blueprint(rrb.Horizontal(cameras, joints, timestamps, column_shares=[2, 3, 3])))
+    rr.send_blueprint(rrb.Blueprint(rrb.Horizontal(cameras, joints, column_shares=[2, 3])))
 
 
 def _log(grouped: dict[str, list[Entry]]) -> None:
     for joint in JOINTS:
         for side in ("leader", "follower"):
             _points(f"joints/{side}/{joint}")
-            _points(f"time/{side}/{joint}")
-    _points("time/wrist")
-    _points("time/overhead")
     for entry in grouped.get(LEADER, []):
         _log_joints("leader", entry)
     for entry in grouped.get(FOLLOWER, []):
         _log_joints("follower", entry)
-    for topic, entity, name in (
-        (WRIST, "observation/wrist", "wrist"),
-        (OVERHEAD, "observation/overhead", "overhead"),
+    for topic, entity in (
+        (WRIST, "observation/wrist"),
+        (OVERHEAD, "observation/overhead"),
     ):
         for entry in grouped.get(topic, []):
-            _log_mark(name, None, entry.offset_ns)
             frame = _image(entry.values)
             if frame is None:
                 continue
             rr.set_time("record", duration=entry.offset_ns / 1e9)
             rr.log(entity, rr.Image(frame))
-
-
-def _log_mark(side: str, joint: str | None, offset_ns: int) -> None:
-    path = f"time/{side}" if joint is None else f"time/{side}/{joint}"
-    event = f"events/{side}" if joint is None else f"events/{side}/{joint}"
-    rr.set_time("record", duration=offset_ns / 1e9)
-    rr.log(path, rr.Scalars(_lane(side, joint)))
-    # A 2D point is one event. The streams row shows a mark at this timestamp.
-    rr.log(event, rr.Points2D([[0.0, _lane(side, joint)]]))
 
 
 def _log_joints(side: str, entry: Entry) -> None:
@@ -249,7 +224,6 @@ def _log_joints(side: str, entry: Entry) -> None:
     rr.set_time("record", duration=entry.offset_ns / 1e9)
     for joint, value in zip(JOINTS, values, strict=True):
         rr.log(f"joints/{side}/{joint}", rr.Scalars(float(value)))
-        _log_mark(side, joint, entry.offset_ns)
 
 
 def main() -> None:
