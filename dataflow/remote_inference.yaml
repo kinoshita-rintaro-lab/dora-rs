@@ -1,0 +1,85 @@
+nodes:
+  - id: wrist-camera
+    path: opencv-video-capture
+    inputs:
+      tick: dora/timer/hz/30
+    outputs:
+      - image
+    env:
+      CAPTURE_PATH: /dev/video6
+      IMAGE_WIDTH: 640
+      IMAGE_HEIGHT: 320
+      FOURCC: MJPG
+      ENCODING: jpeg
+
+  - id: overhead-camera
+    path: opencv-video-capture
+    inputs:
+      tick: dora/timer/hz/30
+    outputs:
+      - image
+    env:
+      CAPTURE_PATH: /dev/video4
+      IMAGE_WIDTH: 640
+      IMAGE_HEIGHT: 320
+      FOURCC: MJPG
+      ENCODING: jpeg
+
+  - id: observer
+    path: dora-so101-observer
+    inputs:
+      tick: dora/timer/hz/30
+      wrist: wrist-camera/image
+      overhead: overhead-camera/image
+      state: follower/follower_state
+    outputs:
+      - observation
+    env:
+      CAMERAS: wrist,overhead
+
+  - id: policy-client
+    path: dora-so101-policy-client
+    inputs:
+      tick: dora/timer/hz/30
+      observation: observer/observation
+      queue_status: dora-so101-action-executor/queue_status
+    outputs:
+      - action_chunk
+    env:
+      POLICY_TYPE: pi05
+      POLICY_DEVICE: cuda
+      ACTIONS_PER_CHUNK: 50
+      CHUNK_SIZE_THRESHOLD: 0.5
+      TASK: "Pick up the cube and place it in the box."
+
+  - id: dora-so101-action-executor
+    path: dora-so101-action-executor
+    inputs:
+      tick: dora/timer/hz/30
+      action_chunk: policy-client/action_chunk
+    outputs:
+      - action
+      - queue_status
+
+  - id: follower
+    path: dora-so101-follower
+    inputs:
+      tick: dora/timer/hz/30
+      cmd: dora-so101-action-executor/action
+    outputs:
+      - follower_state
+    env:
+      PORT: /dev/ttyACM1
+
+  - id: rerun
+    path: dora-so101-rerun
+    inputs:
+      wrist: wrist-camera/image
+      overhead: overhead-camera/image
+      policy: dora-so101-action-executor/action
+      follower: follower/follower_state
+    env:
+      IMAGES: overhead, wrist
+      ACTIONS: policy
+      OBSERVATIONS: follower
+      JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper

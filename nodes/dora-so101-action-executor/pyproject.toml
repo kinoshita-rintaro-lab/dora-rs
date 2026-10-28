@@ -1,0 +1,20 @@
+[project]
+name = "dora-so101-action-executor"
+version = "0.1.0"
+description = "Execute queued action chunks one action per tick for SO-101"
+readme = "README.md"
+authors = [
+    { name = "madamadamadao" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dora-rs>=1.1.0",
+    "pyarrow>=25.0.1",
+]
+
+[project.scripts]
+dora-so101-action-executor = "dora_so101_action_executor.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"

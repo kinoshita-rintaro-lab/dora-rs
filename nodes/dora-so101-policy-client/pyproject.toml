@@ -1,0 +1,22 @@
+[project]
+name = "dora-so101-policy-client"
+version = "0.1.0"
+description = "Robot-side gRPC client for the SO-101 policy server"
+readme = "README.md"
+authors = [
+    { name = "madamadamadao" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "dora-rs>=1.1.0",
+    "lerobot[async]>=0.6.1",
+    "numpy>=2.2.6",
+    "pyarrow>=25.0.1",
+]
+
+[project.scripts]
+dora-so101-policy-client = "dora_so101_policy_client.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"

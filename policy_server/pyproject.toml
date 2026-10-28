@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policy_server"
+version = "0.1.0"
+description = "GPU-side gRPC policy inference server for SO-101 (LeRobot)."
+readme = {text = "GPU-side policy inference server that loads LeRobot policies and serves action predictions over gRPC.", content-type = "text/plain"}
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    {name = "Dmitri Manajev", email = "dmitri@manajev.com"},
+]
+
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.24",
+    "grpcio>=1.60",
+]
+
+[project.optional-dependencies]
+# lerobot must be installed separately (from source or git):
+#   pip install -e ./lerobot
+#   pip install "lerobot[async,pi,peft]"
+
+[project.scripts]
+policy-server = "policy_server.server:main"
+
+[tool.setuptools]
+# The policy_server package lives in "." relative to this pyproject.toml
+package-dir = {"policy_server" = "."}
+packages = ["policy_server"]

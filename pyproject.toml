@@ -17,6 +17,8 @@ dependencies = [
     "dora-so101-observer",
     "dora-so101-record",
     "dora-so101-ui",
+    "dora-so101-action-executor",
+    "dora-so101-policy-client",
 ]
 
 [tool.uv.workspace]
@@ -31,6 +33,8 @@ members = [
     "nodes/dora-so101-observer",
     "nodes/dora-so101-record",
     "nodes/dora-so101-ui",
+    "nodes/dora-so101-action-executor",
+    "nodes/dora-so101-policy-client",
 ]
 
 [tool.uv.sources]
@@ -44,3 +48,5 @@ dora-so101-inference = { workspace = true }
 dora-so101-observer = { workspace = true }
 dora-so101-record = { workspace = true }
 dora-so101-ui = { workspace = true }
+dora-so101-action-executor = { workspace = true }
+dora-so101-policy-client = { workspace = true }
