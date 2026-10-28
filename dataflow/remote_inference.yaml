@@ -11,6 +11,7 @@ nodes:
       IMAGE_HEIGHT: 320
       FOURCC: MJPG
       ENCODING: jpeg
+    restart_policy: on-failure
 
   - id: overhead-camera
     path: opencv-video-capture
@@ -24,6 +25,7 @@ nodes:
       IMAGE_HEIGHT: 320
       FOURCC: MJPG
       ENCODING: jpeg
+    restart_policy: on-failure
 
   - id: observer
     path: dora-so101-observer
@@ -43,33 +45,55 @@ nodes:
       tick: dora/timer/hz/30
       observation: observer/observation
       queue_status: dora-so101-action-executor/queue_status
+      command: inference-ui/command
     outputs:
       - action_chunk
+      - status
     env:
-      POLICY_TYPE: pi05
+      # SERVER_ADDRESS is filled from the shell at launch.
+      # POLICY is optional: without it the client uses its default model
+      # path on the server (see dora-so101-policy-client).
+      SERVER_ADDRESS: ${SERVER_ADDRESS:-}
+      POLICY: ${POLICY:-}
       POLICY_DEVICE: cuda
       ACTIONS_PER_CHUNK: 50
-      CHUNK_SIZE_THRESHOLD: 0.5
-      TASK: "Pick up the cube and place it in the box."
+      CHUNK_SIZE_THRESHOLD: 0.7
 
   - id: dora-so101-action-executor
     path: dora-so101-action-executor
     inputs:
       tick: dora/timer/hz/30
       action_chunk: policy-client/action_chunk
+      command: inference-ui/command
     outputs:
       - action
       - queue_status
+
+  - id: inference-ui
+    path: dora-so101-inference-ui
+    inputs:
+      tick: dora/timer/hz/10
+      status: policy-client/status
+    outputs:
+      - command
+    env:
+      UI_HOST: 127.0.0.1
+      # 8081, not 8080: the collect UI already uses 8080.　http://127.0.0.1:8081
+      UI_PORT: "8081"
+      TASK: "Pick up the cube and place it in the box."
 
   - id: follower
     path: dora-so101-follower
     inputs:
       tick: dora/timer/hz/30
       cmd: dora-so101-action-executor/action
+      command: inference-ui/command
     outputs:
       - follower_state
     env:
       PORT: /dev/ttyACM1
+    restart_policy: on-failure
+    max_restarts: 5
 
   - id: rerun
     path: dora-so101-rerun
@@ -83,3 +107,4 @@ nodes:
       ACTIONS: policy
       OBSERVATIONS: follower
       JOINTS: shoulder_pan,shoulder_lift,elbow_flex,wrist_flex,wrist_roll,gripper
+

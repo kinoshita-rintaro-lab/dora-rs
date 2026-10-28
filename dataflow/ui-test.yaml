@@ -1,6 +1,6 @@
 nodes:
   - id: record-ui
-    path: dora-so101-ui
+    path: dora-so101-collect-ui
     inputs:
       tick: dora/timer/hz/10
     outputs:

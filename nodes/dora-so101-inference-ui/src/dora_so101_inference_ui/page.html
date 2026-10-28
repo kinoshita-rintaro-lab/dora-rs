@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SO-101 Inference</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ece7f5;
+    background: linear-gradient(160deg, #211736 0%, #2e2148 100%);
+  }
+  .panel {
+    width: min(680px, 92vw);
+    text-align: center;
+    background: rgba(43, 32, 66, 0.92);
+    border: 1px solid rgba(190, 170, 230, 0.25);
+    border-radius: 16px;
+    padding: 2em;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  h1 {
+    font-size: 1.5em;
+    margin: 0 0 0.6em;
+    letter-spacing: 0.05em;
+    color: #d9cbf3;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.3em 1em;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #ddd6ea;
+    background: rgba(120, 113, 140, 0.35);
+    border: 1px solid rgba(220, 210, 240, 0.35);
+  }
+  .badge.running {
+    color: #f6dbe4;
+    background: rgba(157, 43, 82, 0.5);
+    border-color: #c96a8b;
+  }
+  .badge.ready {
+    color: #d8ecdf;
+    background: rgba(46, 94, 64, 0.5);
+    border-color: #6fae86;
+  }
+  .badge.error {
+    color: #f3e8d2;
+    background: rgba(133, 94, 38, 0.5);
+    border-color: #c2a15e;
+  }
+  .row { margin: 1.1em 0; }
+  .note { color: #a99cc9; font-size: 0.9em; }
+  #counts { color: #b3a6d6; font-variant-numeric: tabular-nums; }
+  #activeTask { overflow-wrap: anywhere; }
+  button {
+    font-size: 1em;
+    font-weight: 600;
+    padding: 0.5em 1.3em;
+    margin: 0.2em 0.3em;
+    color: #ece7f7;
+    background: #453364;
+    border: 1px solid #7768a3;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  button:hover:not(:disabled) { background: #52407a; border-color: #9788c2; }
+  button:active:not(:disabled) { background: #3c2c5c; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #d6c8f5; outline-offset: 2px; }
+  kbd {
+    font: inherit;
+    font-size: 0.85em;
+    margin-left: 0.35em;
+    padding: 0 0.35em;
+    border: 1px solid currentColor;
+    border-radius: 0.3em;
+    opacity: 0.8;
+  }
+  #start { border-color: #5f9e79; color: #cfe9da; background: #2f4a3c; }
+  #start:hover:not(:disabled) { background: #385c49; border-color: #79b892; }
+  #stop { border-color: #a3705f; color: #ecdcd4; background: #4a3833; }
+  #stop:hover:not(:disabled) { background: #59443d; border-color: #bd8f7d; }
+  #error { color: #e5a3b1; white-space: pre-wrap; }
+  input[type=text] {
+    width: 100%;
+    font-size: 1em;
+    text-align: center;
+    padding: 0.55em;
+    color: #ece7f5;
+    background: rgba(28, 20, 44, 0.85);
+    border: 1px solid rgba(170, 150, 215, 0.4);
+    border-radius: 10px;
+  }
+  input[type=text]:focus { outline: none; border-color: #a68fd0; }
+  label { display: block; margin: 0.75em 0 0.35em; text-align: left; color: #cfc4e8; }
+</style>
+</head>
+<body>
+<main class="panel">
+<h1>SO-101 Inference</h1>
+<div class="row">
+  <span id="badge" class="badge">waiting for policy client</span>
+</div>
+<div class="row note">The robot does not move until Start. Start sends the task to the policy client and begins inference.</div>
+<div class="row">
+  <label for="task">Task</label>
+  <input type="text" id="task" autocomplete="off">
+</div>
+<div class="row" id="activeTask" class="note"></div>
+<div class="row" id="counts"></div>
+<div class="row">
+  <button id="start">Start <kbd>1</kbd></button>
+  <button id="stop">Stop <kbd>2</kbd></button>
+</div>
+<div class="row" id="error"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+
+async function post(body) {
+  await fetch("/api/command", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)});
+  refresh();
+}
+
+$("start").onclick = () => post({command: "start", task: $("task").value});
+$("stop").onclick = () => post({command: "stop"});
+
+async function refresh() {
+  let data;
+  try { data = await (await fetch("/api/status")).json(); }
+  catch (e) { return; }
+  if (document.activeElement !== $("task") && data.task_default && !$("task").value)
+    $("task").value = data.task_default;
+  const st = data.status;
+  const badge = $("badge");
+  if (!st) {
+    badge.textContent = "waiting for policy client";
+    badge.className = "badge";
+    $("start").disabled = true;
+    $("stop").disabled = true;
+    return;
+  }
+  const running = st.state === "running";
+  const ready = st.state === "ready";
+  badge.textContent = running ? "● RUNNING" : (ready ? "ready — policy loaded" :
+    (st.state === "error" ? "error" : "connecting — loading policy"));
+  badge.className = "badge " + (running ? "running" : (ready ? "ready" : (st.state === "error" ? "error" : "")));
+  $("activeTask").textContent = st.task ? "Task: " + st.task : "";
+  $("counts").textContent = "queue " + (st.queue_size ?? 0) +
+    " · next " + (st.next_timestep ?? 0) +
+    " · chunks " + (st.chunks_received ?? 0) +
+    (st.in_flight ? " · inferring" : "");
+  $("start").disabled = !ready || !$("task").value.trim();
+  $("stop").disabled = !running;
+  $("task").disabled = running;
+  $("error").textContent = st.last_error || "";
+}
+
+$("task").addEventListener("input", refresh);
+document.addEventListener("keydown", e => {
+  const typing = document.activeElement === $("task");
+  if (typing || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (e.key === "1" && !$("start").disabled) { e.preventDefault(); $("start").click(); }
+  if (e.key === "2" && !$("stop").disabled) { e.preventDefault(); $("stop").click(); }
+});
+
+refresh();
+setInterval(refresh, 500);
+</script>
+</body>
+</html>

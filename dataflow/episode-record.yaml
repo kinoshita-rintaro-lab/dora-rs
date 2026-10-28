@@ -82,7 +82,7 @@ nodes:
       TASK: Pick up the cube from the left box and place it in the right box.
 
   - id: record-ui
-    path: dora-so101-ui
+    path: dora-so101-collect-ui
     inputs:
       tick: dora/timer/hz/10
       status: record/status

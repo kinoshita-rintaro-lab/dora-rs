@@ -1,4 +1,4 @@
-# dora-so101-ui
+# dora-so101-collect-ui
 
 Web UI for `dora-so101-record`. Serves one control page and bridges it
 to Dora: button presses become `command` outputs for the recorder, and

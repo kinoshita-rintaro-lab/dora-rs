@@ -1,7 +1,7 @@
 [project]
-name = "dora-so101-ui"
+name = "dora-so101-inference-ui"
 version = "0.1.0"
-description = "Web UI for the SO-101 episode recorder"
+description = "Web UI for starting and stopping remote SO-101 inference"
 readme = "README.md"
 authors = [
     { name = "madamadamadao" }
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dora-so101-ui = "dora_so101_ui.main:main"
+dora-so101-inference-ui = "dora_so101_inference_ui.main:main"
 
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]

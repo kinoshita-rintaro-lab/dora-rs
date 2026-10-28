@@ -22,7 +22,7 @@ synchronized or resampled.
 `episode_number` the next free number is used.
 
 Two more commands support marking the result after saving, as the
-web UI (`dora-so101-ui`) does: `end` finishes the episode with the
+web UI (`dora-so101-collect-ui`) does: `end` finishes the episode with the
 result pending (`success: null` in `metadata.yaml`), and
 `mark_success` / `mark_fail` then write the result of the pending
 episode. `success` and `fail` remain the one-step form of end plus

@@ -1,4 +1,7 @@
 import os
+import shutil
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -8,6 +11,19 @@ from dora import Node
 from lerobot.utils.rerun_visualization import init_rerun, log_rerun_data, shutdown_rerun
 
 _ENCODED = {"jpeg", "jpg", "jpe", "png", "bmp", "webp"}
+
+
+def _ensure_viewer_on_path() -> None:
+    """Make the Rerun Viewer executable findable for ``rr.spawn``.
+
+    The viewer ships in the virtual environment's bin directory, but a
+    spawned node's PATH does not necessarily contain it.
+    """
+    if shutil.which("rerun"):
+        return
+    bin_dir = Path(sys.prefix) / "bin"
+    if (bin_dir / "rerun").exists():
+        os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
 
 
 def _items(name: str) -> list[str]:
@@ -103,6 +119,7 @@ def main() -> None:
     action_ids = set(actions)
     observation_ids = set(observations)
 
+    _ensure_viewer_on_path()
     init_rerun(os.environ.get("SESSION", "so101"))
     _layout(images, observations, actions, joints)
     node = Node()
