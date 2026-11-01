@@ -11,7 +11,8 @@ client sends its policy instructions.
 Install LeRobot before installing this package:
 
 ```bash
-pip install lerobot "lerobot[async,pi,peft]"
+# Add the extras for the policies you need (e.g. pi).
+uv pip install lerobot "lerobot[async,smolvla,peft]"
 ```
 
 ## Install

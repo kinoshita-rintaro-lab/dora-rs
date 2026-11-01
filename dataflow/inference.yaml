@@ -54,6 +54,7 @@ nodes:
       - follower_state
     env:
       PORT: /dev/ttyACM0
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
 
   - id: rerun
     path: dora-so101-rerun

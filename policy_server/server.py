@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Modified by Rintaro Kinoshita. gRPC-only CLI; model path can be pinned at startup.
+
 """Start the gRPC policy server.
 
 Usage::
 
-    python -m policy_server --host=0.0.0.0 --port=8080 --fps=30
+    python -m policy_server --host=0.0.0.0 --port=8080 --fps=30 \\
+        --pretrained-name-or-path=outputs/pi05_so101_merged
 """
 
 from __future__ import annotations
@@ -48,6 +51,20 @@ def main() -> None:
         default=2.0,
         help="Observation queue timeout in seconds",
     )
+    parser.add_argument(
+        "--pretrained-name-or-path",
+        default=None,
+        help=(
+            "Local model directory or Hub id to load before listening. "
+            "When set, the model path sent by the client is ignored."
+        ),
+    )
+    parser.add_argument(
+        "--policy-type",
+        default=None,
+        help="Policy type. Read from config.json when omitted.",
+    )
+    parser.add_argument("--device", default="cuda", help="Torch device for the policy")
     args = parser.parse_args()
 
     log_level = os.environ.get("LOGLEVEL", "INFO").upper()
@@ -76,6 +93,14 @@ def main() -> None:
             obs_queue_timeout=args.obs_queue_timeout,
         )
     )
+    if args.pretrained_name_or_path:
+        logging.info(f"Loading policy from {args.pretrained_name_or_path} on {args.device}")
+        engine.load_pinned_policy(
+            args.pretrained_name_or_path,
+            device=args.device,
+            policy_type=args.policy_type,
+        )
+
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
     services_pb2_grpc.add_AsyncInferenceServicer_to_server(PolicyServer(config, engine=engine), server)
     server.add_insecure_port(f"{args.host}:{args.port}")

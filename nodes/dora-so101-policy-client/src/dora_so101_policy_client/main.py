@@ -1,9 +1,11 @@
 import json
+import math
 import os
 import pickle
 import queue
 import threading
 import time
+from pathlib import Path
 
 import grpc
 import numpy as np
@@ -23,9 +25,10 @@ JOINTS = (
 )
 CAMERAS = ("overhead", "wrist")
 RENAME_MAP = {
-    "observation.images.overhead": "observation.images.base_0_rgb",
-    "observation.images.wrist": "observation.images.left_wrist_0_rgb",
+    "observation.images.overhead": "observation.images.camera1",
+    "observation.images.wrist": "observation.images.camera2",
 }
+
 
 
 def _features() -> dict:
@@ -79,10 +82,46 @@ def _vector(action) -> list[float]:
 DEFAULT_POLICY = "outputs/pi05_so101_merged"
 
 
+def _load_dotenv() -> None:
+    """Fill empty variables from a `.env` file at the repo root.
+
+    The dataflow substitutes an unset `SERVER_ADDRESS` as an empty string
+    before this process starts, so an empty value still counts as unset.
+    A variable that is already non-empty is left alone.
+    """
+    current = Path.cwd()
+    for directory in (current, *current.parents):
+        env_file = directory / ".env"
+        if env_file.is_file():
+            _apply_dotenv(env_file)
+            return
+        if (directory / "pyproject.toml").is_file():
+            return
+
+
+def _apply_dotenv(path: Path) -> None:
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").strip()
+        key, separator, value = line.partition("=")
+        if not separator:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if key and not os.environ.get(key):
+            os.environ[key] = value
+
+
 def _connect():
+    _load_dotenv()
     address = os.environ.get("SERVER_ADDRESS")
     if not address or address.startswith("$"):
-        raise RuntimeError("SERVER_ADDRESS is required")
+        raise RuntimeError("SERVER_ADDRESS is required (set it in .env or the environment)")
     policy = os.environ.get("POLICY")
     if not policy or policy.startswith("$"):
         policy = DEFAULT_POLICY
@@ -136,11 +175,26 @@ def main() -> None:
     node = Node()
     actions_per_chunk = int(os.environ.get("ACTIONS_PER_CHUNK", "50"))
     threshold = float(os.environ.get("CHUNK_SIZE_THRESHOLD", "0.5"))
+    mode = os.environ.get("INFERENCE_MODE", "async")
+    if mode not in ("sync", "async", "rtc"):
+        print(f"unknown INFERENCE_MODE {mode!r}; using async", flush=True)
+        mode = "async"
+    sync = mode == "sync"
+    rtc = mode == "rtc"
+    # Steps the previous round trip took. The server uses this as the RTC
+    # inference delay. 12 steps is ~0.4 s at 30 Hz, until the first chunk returns.
+    latency_steps = int(os.environ.get("RTC_INFERENCE_DELAY", "12"))
+    control_fps = float(os.environ.get("CONTROL_FPS", "30"))
+    request_sent_at = 0.0
+    print(f"policy client inference mode: {mode}", flush=True)
 
     latest: dict | None = None
     queue_size = 0
     next_timestep = 0
     in_flight = False
+    # Sync waits until a received chunk has actually shown up in the queue.
+    # A status of 0 from before that refill must not start the next request.
+    awaiting_refill = False
     connected = False
     connect_failed = False
     started = False
@@ -242,6 +296,8 @@ def main() -> None:
             elif event["id"] == "queue_status":
                 values = event["value"].to_pylist()
                 queue_size, next_timestep = int(values[0]), int(values[1])
+                if sync and awaiting_refill and queue_size > 0:
+                    awaiting_refill = False
             elif event["id"] == "command":
                 command = _command_value(event)
                 metadata = event.get("metadata") or {}
@@ -269,6 +325,7 @@ def main() -> None:
                     started = False
                     generation += 1
                     in_flight = False
+                    awaiting_refill = False
                 else:
                     print(f"unknown command {command!r}; skipping", flush=True)
 
@@ -292,21 +349,41 @@ def main() -> None:
                         pa.array(chunk, type=pa.list_(pa.float32())),
                         {"timestep": start},
                     )
-                    print(f"action chunk queued ({len(chunk)} from {start})", flush=True)
+                    if rtc:
+                        latency_steps = max(1, math.ceil((time.monotonic() - request_sent_at) * control_fps))
+                    print(
+                        f"action chunk queued ({len(chunk)} from {start})"
+                        + (f", next rtc delay {latency_steps}" if rtc else ""),
+                        flush=True,
+                    )
+                    if start is not None:
+                        consumed = max(next_timestep - int(start), 0)
+                        queue_size = max(len(chunk) - consumed, 0)
+                    if sync:
+                        awaiting_refill = True
 
+            queue_ready = (
+                queue_size == 0 and not awaiting_refill
+                if sync
+                else queue_size <= threshold * actions_per_chunk
+            )
             if (
                 started
                 and connected
                 and latest is not None
                 and not in_flight
-                and queue_size <= threshold * actions_per_chunk
+                and queue_ready
             ):
                 in_flight = True
                 status_dirty = True
                 raw = dict(latest)
                 if active_task:
                     raw["task"] = active_task
-                jobs.put((raw, max(next_timestep - 1, 0), queue_size == 0, generation))
+                sent_timestep = next_timestep if sync else max(next_timestep - 1, 0)
+                if rtc:
+                    raw["rtc_inference_delay"] = latency_steps
+                request_sent_at = time.monotonic()
+                jobs.put((raw, sent_timestep, queue_size == 0, generation))
 
             _send_status()
     finally:

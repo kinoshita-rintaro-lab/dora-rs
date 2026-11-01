@@ -3,7 +3,9 @@
 Serves a small control page over HTTP and bridges it to Dora: the page
 shows the `status` reported by dora-so101-policy-client, and Start /
 Stop presses become `command` outputs. Start carries the task text in
-its metadata. Nothing is inferred or executed until Start is pressed.
+its metadata. The same presses also emit a `torque` bool for the
+follower: false until Start, true while running, false again on Stop.
+Nothing is inferred or executed until Start is pressed.
 """
 
 import json
@@ -99,6 +101,17 @@ def main() -> None:
     print(f"inference UI at http://{host}:{port}", flush=True)
 
     node = Node()
+    torque_on = False
+    torque_sent = False
+
+    def _send_torque(enabled: bool) -> None:
+        nonlocal torque_on, torque_sent
+        if torque_sent and torque_on == enabled:
+            return
+        node.send_output("torque", pa.array([enabled], type=pa.bool_()))
+        torque_on = enabled
+        torque_sent = True
+
     try:
         for event in node:
             if event["type"] == "STOP":
@@ -114,11 +127,15 @@ def main() -> None:
                 with state.lock:
                     state.status = status
             elif event["id"] == "tick":
+                # Released until the operator presses Start.
+                if not torque_sent:
+                    _send_torque(False)
                 while True:
                     try:
                         item = state.commands.get_nowait()
                     except queue.Empty:
                         break
+                    _send_torque(item["command"] == "start")
                     metadata = {}
                     if item["command"] == "start" and item.get("task"):
                         metadata["task"] = item["task"]

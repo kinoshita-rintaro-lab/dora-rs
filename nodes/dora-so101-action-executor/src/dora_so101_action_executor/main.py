@@ -12,15 +12,31 @@ class AsyncActionExecutor:
     """Queue an action chunk and release one action per tick.
 
     A new chunk replaces actions that have not been executed yet. Actions
-    whose timestep has already passed are dropped. The first
-    ``blend_steps`` actions of a replacement chunk are cross-faded from
-    the actions they replace, so the command does not jump at the seam.
+    whose timestep has already passed are dropped. Unless ``rtc`` is set,
+    the replacement is shifted so its first action matches the action
+    currently commanded (each inference is an independent sample and its
+    absolute joint targets disagree), then the first ``blend_steps``
+    actions are cross-faded from the actions they replace. With ``rtc``
+    the model already continues the previous chunk, so the replacement
+    is used as produced.
     """
 
-    def __init__(self, action_size: int = ACTION_SIZE, blend_steps: int = 10) -> None:
+    def __init__(
+        self,
+        action_size: int = ACTION_SIZE,
+        blend_steps: int = 10,
+        *,
+        sync: bool = False,
+        rtc: bool = False,
+    ) -> None:
         self.action_size = action_size
         self.blend_steps = blend_steps
+        self.sync = sync
+        self.rtc = rtc
         self._pending: deque[list[float]] = deque()
+        self._last_action: list[float] | None = None
+        self._smooth: list[float] | None = None
+        self.smooth_alpha = 1.0
         self.next_timestep = 0
         self.enabled = False
 
@@ -29,10 +45,14 @@ class AsyncActionExecutor:
 
     def start(self) -> None:
         self.enabled = True
+        self._last_action = None
+        self._smooth = None
 
     def stop(self) -> None:
         self.enabled = False
         self._pending.clear()
+        self._last_action = None
+        self._smooth = None
 
     def push_chunk(
         self, chunk: Iterable[Sequence[float]], start_timestep: int | None = None
@@ -40,10 +60,19 @@ class AsyncActionExecutor:
         actions = [[float(value) for value in action] for action in chunk]
         if any(len(action) != self.action_size for action in actions):
             raise ValueError(f"each action must have {self.action_size} values")
+        if self.sync and self._pending:
+            return len(self._pending)
         start = self.next_timestep if start_timestep is None else start_timestep
         first = max(start, self.next_timestep)
         aligned = actions[first - start :]
-        if self._pending and self.blend_steps > 0:
+        # RTC chunks already follow the previous plan. Shifting them again
+        # would stack a second correction on the model's.
+        align = not self.sync and not self.rtc
+        anchor = (self._pending[0] if self._pending else self._last_action) if align else None
+        if anchor is not None and aligned:
+            delta = [anchor[i] - aligned[0][i] for i in range(self.action_size)]
+            aligned = [[value + shift for value, shift in zip(action, delta)] for action in aligned]
+        if align and self._pending and self.blend_steps > 0:
             old = list(self._pending)
             merged = []
             for index, action in enumerate(aligned):
@@ -66,8 +95,23 @@ class AsyncActionExecutor:
         if not self.enabled or not self._pending:
             return None
         action = self._pending.popleft()
+        # The queue and the async anchor stay on the model's action.
+        # Only the value sent to the arm is low-passed.
+        self._last_action = list(action)
         self.next_timestep += 1
-        return action
+        return self._smooth_action(action)
+
+    def _smooth_action(self, action: list[float]) -> list[float]:
+        """One-pole low-pass. The first action after start passes through."""
+        if self.smooth_alpha >= 1.0 or self._smooth is None:
+            self._smooth = list(action)
+            return list(action)
+        smoothed = [
+            previous + self.smooth_alpha * (value - previous)
+            for previous, value in zip(self._smooth, action)
+        ]
+        self._smooth = smoothed
+        return smoothed
 
 
 def _chunk(value) -> list[list[float]]:
@@ -98,7 +142,25 @@ def _command_value(event) -> str | None:
 
 def main() -> None:
     node = Node()
-    executor = AsyncActionExecutor(blend_steps=int(os.environ.get("BLEND_STEPS", "10")))
+    mode = os.environ.get("INFERENCE_MODE", "async")
+    if mode not in ("sync", "async", "rtc"):
+        print(f"unknown INFERENCE_MODE {mode!r}; using async", flush=True)
+        mode = "async"
+    executor = AsyncActionExecutor(
+        blend_steps=int(os.environ.get("BLEND_STEPS", "10")),
+        sync=mode == "sync",
+        rtc=mode == "rtc",
+    )
+    raw_alpha = os.environ.get("ACTION_SMOOTH", "0.35")
+    try:
+        alpha = float(raw_alpha)
+    except ValueError:
+        alpha = -1.0
+    if not 0.0 < alpha <= 1.0:
+        print(f"ACTION_SMOOTH {raw_alpha!r} is outside (0, 1]; using 0.35", flush=True)
+        alpha = 0.35
+    executor.smooth_alpha = alpha
+    print(f"action executor inference mode: {mode}, smooth {alpha:g}", flush=True)
 
     def _send_status() -> None:
         node.send_output(

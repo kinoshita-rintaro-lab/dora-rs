@@ -7,6 +7,8 @@ nodes:
       - leader_cmd
     env:
       PORT: /dev/ttyACM1
+      # Sim scales a degree-like gripper. Discrete 0/1 would barely open it.
+      GRIPPER_MODE: ${GRIPPER_MODE:-continuous}
 
   - id: mujoco
     path: dora-so101-mujoco

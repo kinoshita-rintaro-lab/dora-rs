@@ -16,12 +16,14 @@ is the task sent with every observation.
 | input | `tick` | wake-up timer, e.g. `dora/timer/hz/10` |
 | input | `status` | policy client status, one JSON string |
 | output | `command` | `start` or `stop` string; `start` has a `task` metadata entry |
+| output | `torque` | bool. `false` until Start, `true` while running, `false` on Stop |
 
-Wire `command` to `dora-so101-policy-client`,
-`dora-so101-action-executor`, and the follower: the client starts and
-stops requesting inference, the executor only releases actions between
-Start and Stop (Stop also clears its queue), and the follower only
-enables joint torque between Start and Stop.
+Wire `command` to `dora-so101-policy-client` and
+`dora-so101-action-executor`: the client starts and stops requesting
+inference, and the executor only releases actions between Start and
+Stop (Stop also clears its queue). Wire `torque` to the follower.
+Graphs that do not wire `torque` leave the arm holding and following
+`cmd`.
 
 ## Environment
 

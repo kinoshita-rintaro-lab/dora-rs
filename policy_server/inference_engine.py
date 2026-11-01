@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Modified by Rintaro Kinoshita. Real-time chunking logic added.
+
 from __future__ import annotations
 
 import gc
+import json
+import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from queue import Empty, Queue
 from typing import Any
 
@@ -29,7 +34,9 @@ from lerobot.async_inference.helpers import (
     FPSTracker, Observation, RemotePolicyConfig, TimedAction, TimedObservation,
     extract_state_from_raw_observation, get_logger, is_image_key,
     make_lerobot_observation)
+from lerobot.configs import RTCAttentionSchedule
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+from lerobot.policies.rtc.configuration_rtc import RTCConfig
 from lerobot.processor import PolicyProcessorPipeline
 from lerobot.utils.constants import OBS_STATE
 
@@ -39,6 +46,15 @@ logger = get_logger("inference_engine", log_to_file=False)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _read_pretrained_config(path: str) -> dict:
+    """Return config.json from a local pretrained folder, or an empty dict."""
+    config_path = Path(path) / "config.json"
+    if not config_path.is_file():
+        return {}
+    with config_path.open() as f:
+        return json.load(f)
 
 
 def _decode_jpeg_to_rgb(jpeg_bytes: bytes) -> np.ndarray:
@@ -138,6 +154,14 @@ class InferenceEngine:
         self.policy: Any = None
         self.preprocessor: PolicyProcessorPipeline | None = None
         self.postprocessor: PolicyProcessorPipeline | None = None
+        self._loaded_name_or_path: str | None = None
+        self._loaded_rename_map: dict[str, str] | None = None
+        # Set by load_pinned_policy(). Client model paths are ignored while this is set.
+        self._pinned_name_or_path: str | None = None
+        # Previous chunk in normalized space, before postprocess. Used only when the
+        # client sends rtc_inference_delay.
+        self._rtc_prev: torch.Tensor | None = None
+        self._rtc_prev_start: int | None = None
 
     @property
     def running(self) -> bool:
@@ -160,6 +184,10 @@ class InferenceEngine:
         self.policy = None
         self.preprocessor = None
         self.postprocessor = None
+        self._loaded_name_or_path = None
+        self._loaded_rename_map = None
+        self._rtc_prev = None
+        self._rtc_prev_start = None
 
         if had_policy:
             gc.collect()
@@ -168,12 +196,16 @@ class InferenceEngine:
             logger.info("Policy unloaded and caches released")
 
     def clear_session(self) -> None:
-        """Flush per-client/session state without stopping the server."""
+        """Flush the in-flight observation and action state. The loaded weights stay resident."""
         self.observation_queue = Queue(maxsize=1)
         with self._predicted_timesteps_lock:
             self._predicted_timesteps = set()
         self.last_processed_obs = None
-        self.unload_policy()
+        self._rtc_prev = None
+        self._rtc_prev_start = None
+        self.fps_tracker.reset()
+        if self.policy is not None and hasattr(self.policy, "reset"):
+            self.policy.reset()
 
     def reset(self) -> None:
         """Flush state and mark the engine as stopped."""
@@ -188,9 +220,64 @@ class InferenceEngine:
     # Policy loading
     # ------------------------------------------------------------------
 
+    def load_pinned_policy(self, path: str, device: str = "cuda", policy_type: str | None = None) -> None:
+        """Load weights from ``path`` and keep that path for the life of the process.
+
+        A later client ``RemotePolicyConfig`` can still update features, chunk length,
+        device, and rename_map. Its model path is replaced with ``path``.
+        """
+        saved = _read_pretrained_config(path)
+        resolved_type = policy_type or saved.get("type")
+        if not resolved_type:
+            raise ValueError(
+                f"Could not read a policy type from {path}/config.json. Pass --policy-type."
+            )
+        actions_per_chunk = int(saved.get("n_action_steps") or 50)
+        self._pinned_name_or_path = path
+        self.load_policy(
+            RemotePolicyConfig(
+                policy_type=resolved_type,
+                pretrained_name_or_path=path,
+                lerobot_features={},
+                actions_per_chunk=actions_per_chunk,
+                device=device,
+            )
+        )
+
     def load_policy(self, config: RemotePolicyConfig) -> None:
+        if self._pinned_name_or_path is not None:
+            if config.pretrained_name_or_path != self._pinned_name_or_path:
+                logger.info(
+                    f"Client requested {config.pretrained_name_or_path}; "
+                    f"keeping server model {self._pinned_name_or_path}"
+                )
+            config.pretrained_name_or_path = self._pinned_name_or_path
+            if self.policy_type is not None and config.policy_type != self.policy_type:
+                logger.info(
+                    f"Client requested policy type {config.policy_type}; keeping {self.policy_type}"
+                )
+                config.policy_type = self.policy_type
+
         if config.policy_type not in SUPPORTED_POLICIES:
             raise ValueError(f"Unsupported policy type {config.policy_type}. Supported: {SUPPORTED_POLICIES}")
+
+        same_weights = (
+            self.policy is not None
+            and self.policy_type == config.policy_type
+            and self._loaded_name_or_path == config.pretrained_name_or_path
+        )
+        if same_weights:
+            self.device = config.device
+            self.lerobot_features = config.lerobot_features
+            self.actions_per_chunk = config.actions_per_chunk
+            self.policy.to(self.device)
+            if self._loaded_rename_map != config.rename_map:
+                self._load_processors(config)
+            logger.info(
+                f"Policy already resident on {self.device}; skipped weight reload "
+                f"({config.pretrained_name_or_path})"
+            )
+            return
 
         if self.policy is not None:
             logger.info("Replacing existing policy; unloading previous model first")
@@ -205,7 +292,21 @@ class InferenceEngine:
         start = time.perf_counter()
         self.policy = policy_class.from_pretrained(config.pretrained_name_or_path)
         self.policy.to(self.device)
+        self._loaded_name_or_path = config.pretrained_name_or_path
+        if getattr(self.policy, "supports_rtc", lambda: False)():
+            self.policy.config.rtc_config = RTCConfig(
+                enabled=True,
+                execution_horizon=int(os.environ.get("RTC_EXECUTION_HORIZON", "25")),
+                max_guidance_weight=float(os.environ.get("RTC_MAX_GUIDANCE_WEIGHT", "10.0")),
+                prefix_attention_schedule=RTCAttentionSchedule.LINEAR,
+            )
+            self.policy.init_rtc_processor()
+            logger.info(f"RTC ready: {self.policy.config.rtc_config}")
+        self._load_processors(config)
+        elapsed = time.perf_counter() - start
+        logger.info(f"Policy loaded on {self.device} in {elapsed:.2f}s")
 
+    def _load_processors(self, config: RemotePolicyConfig) -> None:
         device_override = {"device": self.device}
         preprocessor_overrides = {"device_processor": device_override}
         # Only override the rename_map if the client actually provides one.
@@ -218,8 +319,7 @@ class InferenceEngine:
             preprocessor_overrides=preprocessor_overrides,
             postprocessor_overrides={"device_processor": device_override},
         )
-        elapsed = time.perf_counter() - start
-        logger.info(f"Policy loaded on {self.device} in {elapsed:.2f}s")
+        self._loaded_rename_map = dict(config.rename_map)
 
     # ------------------------------------------------------------------
     # Observation management
@@ -259,9 +359,25 @@ class InferenceEngine:
     # Inference
     # ------------------------------------------------------------------
 
-    def _get_action_chunk(self, observation: dict[str, torch.Tensor]) -> torch.Tensor:
-        """Get an action chunk from the policy."""
-        chunk = self.policy.predict_action_chunk(observation)
+    def _get_action_chunk(
+        self,
+        observation: dict[str, torch.Tensor],
+        inference_delay: int | None = None,
+        prev_chunk_left_over: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Get an action chunk from the policy.
+
+        A leftover prefix is passed only when the client attached rtc_inference_delay.
+        Without it, this is a plain predict_action_chunk call.
+        """
+        if prev_chunk_left_over is not None:
+            chunk = self.policy.predict_action_chunk(
+                observation,
+                inference_delay=int(inference_delay),
+                prev_chunk_left_over=prev_chunk_left_over,
+            )
+        else:
+            chunk = self.policy.predict_action_chunk(observation)
         if chunk.ndim != 3:
             chunk = chunk.unsqueeze(0)
         return chunk[:, : self.actions_per_chunk, :]
@@ -282,6 +398,16 @@ class InferenceEngine:
         # 0. Decode any compressed (JPEG) images to numpy arrays
         raw_obs = _decode_compressed_images(observation_t.get_observation())
 
+        # RTC is used only when the robot attaches rtc_inference_delay.
+        # must_go means the robot has no actions left, so the previous plan is dropped.
+        delay = raw_obs.pop("rtc_inference_delay", None)
+        timestep = observation_t.get_timestep()
+        prev = None
+        if delay is not None and not observation_t.must_go and self._rtc_prev is not None:
+            offset = timestep - self._rtc_prev_start
+            if 0 <= offset < self._rtc_prev.shape[0]:
+                prev = self._rtc_prev[offset:]
+
         # 1. Prepare observation
         start_prepare = time.perf_counter()
         observation: Observation = _raw_observation_to_observation(
@@ -298,10 +424,18 @@ class InferenceEngine:
 
         # 3. Get action chunk
         start_inference = time.perf_counter()
-        action_tensor = self._get_action_chunk(observation)
+        action_tensor = self._get_action_chunk(observation, delay, prev)
         inference_time = time.perf_counter() - start_inference
         logger.info(
             f"Preprocessing and inference took {inference_time:.4f}s, action shape: {action_tensor.shape}"
+        )
+
+        # Save the normalized chunk before postprocess. RTC compares normalized values.
+        self._rtc_prev = action_tensor[0].detach().clone()
+        self._rtc_prev_start = timestep
+        logger.info(
+            f"RTC {'on' if prev is not None else 'off'} | delay={delay} | "
+            f"prefix={0 if prev is None else prev.shape[0]} | inference={inference_time:.3f}s"
         )
 
         # 4. Apply postprocessor
@@ -360,6 +494,7 @@ class InferenceEngine:
     # ------------------------------------------------------------------
 
     def stop(self) -> None:
-        """Signal the engine to stop."""
+        """Signal the engine to stop and release the loaded weights."""
         self.reset()
+        self.unload_policy()
         logger.info("InferenceEngine stopping...")

@@ -50,14 +50,23 @@ nodes:
       - action_chunk
       - status
     env:
-      # SERVER_ADDRESS is filled from the shell at launch.
+      # SERVER_ADDRESS comes from the repo-root .env, or from the shell.
       # POLICY is optional: without it the client uses its default model
       # path on the server (see dora-so101-policy-client).
       SERVER_ADDRESS: ${SERVER_ADDRESS:-}
       POLICY: ${POLICY:-}
       POLICY_DEVICE: cuda
       ACTIONS_PER_CHUNK: 50
-      CHUNK_SIZE_THRESHOLD: 0.7
+      # sync: run each chunk to the end, then infer. async: overlap
+      # inference with execution and blend the seam. rtc: same overlap,
+      # but the server guides each chunk from the previous one, so the
+      # executor does not blend. Requires the RTC policy server.
+      # Override from the shell with INFERENCE_MODE=async to go back.
+      INFERENCE_MODE: ${INFERENCE_MODE:-rtc}
+      # rtc requests while ~30 of 50 actions remain, so the previous
+      # chunk still covers the server's execution horizon (25) plus the
+      # ~12 steps inference takes. async used 0.5.
+      CHUNK_SIZE_THRESHOLD: ${CHUNK_SIZE_THRESHOLD:-0.5}
 
   - id: dora-so101-action-executor
     path: dora-so101-action-executor
@@ -68,6 +77,13 @@ nodes:
     outputs:
       - action
       - queue_status
+    env:
+      # Same value as policy-client. rtc replaces a chunk without blending.
+      INFERENCE_MODE: ${INFERENCE_MODE:-rtc}
+      # New-sample weight of a one-pole low-pass on the commanded joints,
+      # including the gripper. 0.35 drops sample-to-sample noise at 30 Hz.
+      # 1 sends the action unchanged.
+      ACTION_SMOOTH: ${ACTION_SMOOTH:-0.2}
 
   - id: inference-ui
     path: dora-so101-inference-ui
@@ -76,6 +92,7 @@ nodes:
       status: policy-client/status
     outputs:
       - command
+      - torque
     env:
       UI_HOST: 127.0.0.1
       # 8081, not 8080: the collect UI already uses 8080.　http://127.0.0.1:8081
@@ -87,11 +104,13 @@ nodes:
     inputs:
       tick: dora/timer/hz/30
       cmd: dora-so101-action-executor/action
-      command: inference-ui/command
+      # bool: true holds, false releases. Teleop graphs leave this unwired.
+      torque: inference-ui/torque
     outputs:
       - follower_state
     env:
       PORT: /dev/ttyACM1
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
     restart_policy: on-failure
     max_restarts: 5
 

@@ -7,6 +7,8 @@ nodes:
       - leader_cmd
     env:
       PORT: /dev/ttyACM0
+      # discrete: gripper in leader_cmd is 0/1. continuous: degrees.
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
     restart_policy: on-failure
 
   - id: follower
@@ -16,7 +18,9 @@ nodes:
     outputs:
       - follower_state
     env:
-      PORT: /dev/ttyACM1 
+      PORT: /dev/ttyACM1
+      # discrete: 0/1 cmd opens to GRIPPER_OPEN degrees. State gripper is 0/1 too.
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
     restart_policy: on-failure
     max_restarts: 5
     startup_timeout: 3.0
@@ -79,7 +83,7 @@ nodes:
     env:
       DIRECTORY: ../record
       NAME: pick-and-place
-      TASK: Pick up the cube from the left box and place it in the right box.
+      TASK: Pick up the cube from the l1eft box and place it in the right box.
 
   - id: record-ui
     path: dora-so101-collect-ui

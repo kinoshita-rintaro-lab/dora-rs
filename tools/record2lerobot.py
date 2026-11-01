@@ -12,7 +12,9 @@ written. A later run skips those ids and appends only new episodes.
 
 An episode that is missing a camera from the recording setup is an error.
 Pass --skip-incomplete to leave those episodes out. Episodes whose success
-flag is still unset are skipped.
+flag is still unset are skipped. An episode that drops at least --max-drop
+of its reference frames (default 5%) is skipped and is not recorded in
+conversion.json.
 
     uv run tools/record2lerobot.py record/pick-and-place --root datasets/so101 --reference overhead
 """
@@ -200,7 +202,7 @@ def _problem(message: str, skip_incomplete: bool) -> None:
     raise SystemExit(message)
 
 
-def _convert(dataset: LeRobotDataset | None, dataset_dir: Path, episode: dict, fps: int, joints: list[str], cameras: list[str], fallback_task: str | None, root: Path, repo_id: str, robot_type: str, skip_incomplete: bool, reference: str, slop: float, max_gap: float) -> tuple[LeRobotDataset | None, bool]:
+def _convert(dataset: LeRobotDataset | None, dataset_dir: Path, episode: dict, fps: int, joints: list[str], cameras: list[str], fallback_task: str | None, root: Path, repo_id: str, robot_type: str, skip_incomplete: bool, reference: str, slop: float, max_gap: float, max_drop: float) -> tuple[LeRobotDataset | None, bool]:
     episode_id = str(episode.get("id"))
     episode_dir = dataset_dir / "episodes" / episode_id
     if not episode_dir.is_dir():
@@ -223,6 +225,13 @@ def _convert(dataset: LeRobotDataset | None, dataset_dir: Path, episode: dict, f
     if not task:
         raise SystemExit(f"episode {episode_id} has no task; pass --task")
     synced = curation.drop_gap_frames(synced, max_gap)
+    fraction = curation.dropped_fraction(synced["source_frames"], len(synced["t"]))
+    if fraction >= max_drop:
+        print(
+            f"episode {episode_id}: dropped {fraction:.1%} of reference frames "
+            f"({len(synced['t'])} / {synced['source_frames']} kept); skipping"
+        )
+        return dataset, False
     if len(synced["t"]) == 0:
         _problem(f"episode {episode_id} kept no frames", skip_incomplete)
         return dataset, False
@@ -260,6 +269,7 @@ def main() -> None:
     parser.add_argument("--reference", required=True, help="camera whose timestamps are the master clock, e.g. overhead")
     parser.add_argument("--slop", type=float, default=0.020, help="nearest-match window in seconds (default: 0.020)")
     parser.add_argument("--max-gap", type=float, default=0.050, help="drop reference frames inside another camera's gap longer than this (default: 0.050)")
+    parser.add_argument("--max-drop", type=float, default=curation.DEFAULT_MAX_DROP, help="skip an episode when at least this fraction of reference frames is dropped (default: 0.05)")
     parser.add_argument("--robot-type", default=None)
     parser.add_argument("--episodes", nargs="*", help="episode ids to convert; default is every finished episode")
     parser.add_argument("--success-only", action="store_true", help="convert only episodes marked success")
@@ -271,6 +281,8 @@ def main() -> None:
         raise SystemExit("--slop must be non-negative")
     if args.max_gap <= 0:
         raise SystemExit("--max-gap must be positive")
+    if not 0.0 <= args.max_drop <= 1.0:
+        raise SystemExit("--max-drop must be between 0 and 1")
 
     metadata = _metadata(args.dataset)
     joints, cameras, robot_type = _names(metadata)
@@ -313,6 +325,7 @@ def main() -> None:
                 args.reference,
                 args.slop,
                 args.max_gap,
+                args.max_drop,
             )
             if saved:
                 episode_id = str(episode.get("id"))

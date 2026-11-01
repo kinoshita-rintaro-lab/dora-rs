@@ -180,6 +180,19 @@ def _slice_synced(synced: dict, indexes: np.ndarray) -> dict:
     }
 
 
+DEFAULT_MAX_DROP = 0.05
+
+
+def dropped_fraction(source_frames: int, kept_frames: int) -> float:
+    """Share of reference frames removed by alignment and gap drops.
+
+    An empty reference stream counts as fully dropped.
+    """
+    if source_frames <= 0:
+        return 1.0
+    return (source_frames - kept_frames) / source_frames
+
+
 def drop_gap_frames(synced: dict, max_gap: float = 0.050) -> dict:
     """Drop master frames that fall strictly inside another camera's gap.
 
@@ -224,12 +237,15 @@ def main() -> None:
     parser.add_argument("--reference", required=True, help="camera whose timestamps are the master clock, e.g. wrist")
     parser.add_argument("--slop", type=float, default=0.020, help="nearest-match window in seconds (default: 0.020)")
     parser.add_argument("--max-gap", type=float, default=0.050, help="drop reference frames inside another camera's gap longer than this (default: 0.050)")
+    parser.add_argument("--max-drop", type=float, default=DEFAULT_MAX_DROP, help="flag an episode when at least this fraction of reference frames is dropped (default: 0.05)")
     parser.add_argument("--episodes", nargs="*", help="episode ids to sync; default is every episode")
     args = parser.parse_args()
     if args.slop < 0:
         raise SystemExit("--slop must be non-negative")
     if args.max_gap <= 0:
         raise SystemExit("--max-gap must be positive")
+    if not 0.0 <= args.max_drop <= 1.0:
+        raise SystemExit("--max-drop must be between 0 and 1")
     metadata = _metadata(args.dataset)
     for episode in _selected(metadata, args.episodes):
         episode_id = str(episode.get("id"))
@@ -242,8 +258,11 @@ def main() -> None:
         except ValueError as error:
             raise SystemExit(str(error)) from error
         dropped = synced["dropped"]
+        fraction = dropped_fraction(synced["source_frames"], len(kept["t"]))
+        verdict = "reject" if fraction >= args.max_drop else "keep"
         print(
-            f"episode {episode_id}: kept {len(kept['t'])} / {synced['source_frames']} "
+            f"episode {episode_id}: {verdict} kept {len(kept['t'])} / {synced['source_frames']} "
+            f"dropped {fraction:.1%} "
             f"reference={args.reference} slop={args.slop:.3f}s max_gap={args.max_gap:.3f}s "
             f"gap={len(synced['t']) - len(kept['t'])} "
             f"dropped camera={dropped['camera']} action={dropped['action']} state={dropped['state']}"

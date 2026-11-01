@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Modified by Rintaro Kinoshita. Unused imports removed.
+
 """Thin gRPC servicer — delegates all inference to :class:`InferenceEngine`."""
 
 from __future__ import annotations

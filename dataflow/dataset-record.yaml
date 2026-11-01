@@ -7,6 +7,7 @@ nodes:
       - leader_cmd
     env:
       PORT: /dev/ttyACM0
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
 
   - id: follower
     path: dora-so101-follower
@@ -16,6 +17,7 @@ nodes:
       - follower_state
     env:
       PORT: /dev/ttyACM1
+      GRIPPER_MODE: ${GRIPPER_MODE:-discrete}
 
   - id: wrist-camera
     path: opencv-video-capture

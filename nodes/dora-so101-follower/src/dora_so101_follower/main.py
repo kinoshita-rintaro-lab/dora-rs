@@ -13,26 +13,65 @@ JOINTS = (
     "wrist_roll",
     "gripper",
 )
+GRIPPER = JOINTS.index("gripper")
 
-def _publish_state(follower: SO101Follower, node: Node) -> None:
+
+def _gripper() -> dict:
+    mode = os.environ.get("GRIPPER_MODE", "discrete").strip().lower()
+    if mode not in ("discrete", "continuous"):
+        print(f"unknown GRIPPER_MODE {mode!r}; using discrete", flush=True)
+        mode = "discrete"
+    gripper = {
+        "discrete": mode == "discrete",
+        "threshold": float(os.environ.get("GRIPPER_THRESHOLD", "10")),
+        "closed": float(os.environ.get("GRIPPER_CLOSED", "0")),
+        "open": float(os.environ.get("GRIPPER_OPEN", "30")),
+    }
+    if gripper["discrete"]:
+        print(
+            "follower gripper discrete "
+            f"(threshold {gripper['threshold']}, closed {gripper['closed']}, open {gripper['open']})",
+            flush=True,
+        )
+    else:
+        print("follower gripper continuous", flush=True)
+    return gripper
+
+
+def _publish_state(follower: SO101Follower, node: Node, gripper: dict) -> None:
     state = follower.get_observation()
     measured = [state[f"{name}.pos"] for name in JOINTS]
+    if gripper["discrete"]:
+        measured[GRIPPER] = 1.0 if measured[GRIPPER] >= gripper["threshold"] else 0.0
     node.send_output("follower_state", pa.array(measured, type=pa.float32()))
 
 
-def _apply(follower: SO101Follower, node: Node, angle: list[float]) -> None:
+def _apply(follower: SO101Follower, node: Node, angle: list[float], gripper: dict) -> None:
+    if gripper["discrete"]:
+        angle = list(angle)
+        angle[GRIPPER] = gripper["open"] if float(angle[GRIPPER]) >= 0.5 else gripper["closed"]
     follower.send_action({f"{name}.pos": value for name, value in zip(JOINTS, angle)})
-    _publish_state(follower, node)
+    _publish_state(follower, node, gripper)
 
 
-def _command_value(event) -> str | None:
+def _torque_value(event) -> bool | None:
+    """Shared torque signal. True holds position, false releases the arm."""
     value = event["value"]
     try:
-        if hasattr(value, "as_py"):
-            return value[0].as_py()
-        return value.to_pylist()[0]
+        raw = value[0].as_py() if hasattr(value, "as_py") else value.to_pylist()[0]
     except Exception:
         return None
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and raw in (0, 1, 0.0, 1.0):
+        return bool(raw)
+    if isinstance(raw, str):
+        text = raw.strip().lower()
+        if text in ("1", "on", "true"):
+            return True
+        if text in ("0", "off", "false"):
+            return False
+    return None
 
 
 def _release(follower: SO101Follower, *, disable_torque: bool) -> None:
@@ -48,10 +87,14 @@ def _release(follower: SO101Follower, *, disable_torque: bool) -> None:
 
 
 def main() -> None:
+    gripper = _gripper()
     follower = SO101Follower(SO101FollowerConfig(port=os.environ["PORT"], id="so101-follower"))
     node = Node()
     connected = False
-    torque_enabled = False
+    # connect() enables torque. Graphs that never send `torque` stay that way
+    # and keep following cmd. A later false releases the arm.
+    torque_enabled = True
+    torque_request: bool | None = None
     retry_at = 0.0
 
     def _set_torque(enabled: bool) -> None:
@@ -63,21 +106,20 @@ def main() -> None:
         else:
             follower.bus.disable_torque()
         torque_enabled = enabled
-        try:
-            readback = follower.bus.sync_read("Torque_Enable")
-        except Exception as exc:
-            readback = f"readback failed ({exc})"
-        print(
-            f"follower torque {'on' if enabled else 'off'} (readback: {readback})",
-            flush=True,
-        )
+        print(f"follower torque {'on' if enabled else 'off'}", flush=True)
 
     try:
         for event in node:
             if event["type"] == "STOP":
                 break
-            if event["type"] != "INPUT" or event["id"] not in ("tick", "cmd", "command"):
+            if event["type"] != "INPUT" or event["id"] not in ("tick", "cmd", "torque"):
                 continue
+            if event["id"] == "torque":
+                requested = _torque_value(event)
+                if requested is None:
+                    print("torque signal rejected; skipping", flush=True)
+                else:
+                    torque_request = requested
             if not connected:
                 now = time.monotonic()
                 if now < retry_at:
@@ -90,27 +132,25 @@ def main() -> None:
                     retry_at = now + 1.0
                     continue
                 connected = True
-                # connect() leaves torque on; the arm must stay limp
-                # until inference is started from the UI.
                 torque_enabled = True
-                try:
-                    _set_torque(False)
-                except ConnectionError as exc:
-                    print(f"follower torque off failed ({exc})", flush=True)
+                if torque_request is not None:
+                    try:
+                        _set_torque(torque_request)
+                    except ConnectionError as exc:
+                        print(f"follower torque update failed ({exc})", flush=True)
 
             try:
-                if event["id"] == "tick":
-                    _publish_state(follower, node)
-                elif event["id"] == "cmd":
-                    _apply(follower, node, event["value"].to_pylist())
+                if event["id"] == "torque":
+                    if torque_request is not None:
+                        _set_torque(torque_request)
+                elif event["id"] == "tick":
+                    _publish_state(follower, node, gripper)
                 else:
-                    command = _command_value(event)
-                    if command == "start":
-                        _set_torque(True)
-                    elif command == "stop":
-                        _set_torque(False)
-                    else:
-                        print(f"unknown command {command!r}; skipping", flush=True)
+                    # A goal written after torque-off turns the servo back into
+                    # position hold. Drop anything still queued.
+                    if not torque_enabled:
+                        continue
+                    _apply(follower, node, event["value"].to_pylist(), gripper)
             except ConnectionError as exc:
                 print(f"follower link lost ({exc}); skipping", flush=True)
     finally:
