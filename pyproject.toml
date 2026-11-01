@@ -24,7 +24,6 @@ dependencies = [
 
 [tool.uv.workspace]
 members = [
-    "nodes/dora-so101-teleop",
     "nodes/dora-so101-leader",
     "nodes/dora-so101-mujoco",
     "nodes/dora-so101-follower",
@@ -40,7 +39,6 @@ members = [
 ]
 
 [tool.uv.sources]
-dora-so101-teleop = { workspace = true }
 dora-so101-leader = { workspace = true }
 dora-so101-follower = { workspace = true }
 dora-so101-mujoco = { workspace = true }

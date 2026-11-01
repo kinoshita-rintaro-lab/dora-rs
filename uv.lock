@@ -22,7 +22,6 @@ members = [
     "dora-so101-policy-client",
     "dora-so101-record",
     "dora-so101-rerun",
-    "dora-so101-teleop",
     "opencv-video-capture",
 ]
 
@@ -965,11 +964,6 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "rerun-sdk", specifier = ">=0.24" },
 ]
-
-[[package]]
-name = "dora-so101-teleop"
-version = "0.1.0"
-source = { editable = "nodes/dora-so101-teleop" }
 
 [[package]]
 name = "draccus"

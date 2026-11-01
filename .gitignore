@@ -5,15 +5,25 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
 
 # Virtual environments
 .venv
 
+# Editor files
+*.swp
+*.swo
+*~
+
+# Run outputs and recorded data (camera images of people and rooms).
 dataflow/out/
 dataflow/git
+dataflow/dataset/
 out
+_work/
 record
 datasets
+*.drec
 
 # Machine-local settings, such as the policy server address.
 .env

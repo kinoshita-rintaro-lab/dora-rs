@@ -14,14 +14,17 @@ dora run dataflow/episode-record.yaml
 
 ## 遠隔推論
 
-policy server のアドレスはリポジトリ直下の `.env` に書く。このファイルは git に入らない。
+policy server のアドレスを、リポジトリ直下の `.env` に `host:port` の形で書く。このファイルは git に入らない。
 
 ```bash
-cp .env.example .env
+SERVER_ADDRESS=<host>:<port>
+```
+
+```bash
 dora run dataflow/remote_inference.yaml
 ```
 
-`.env` の `SERVER_ADDRESS` は `host:port` である。起動中に http://127.0.0.1:8081 を開く。同じ変数をシェルで渡したときは、そちらが使われる。
+起動中に http://127.0.0.1:8081 を開く。同じ変数をシェルで渡したときは、そちらが使われる。
 
 ## 時刻合わせの確認
 
